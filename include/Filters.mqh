@@ -29,6 +29,7 @@ struct UnifiedScoringConfig
    // SELL: MA50 phải đang giảm (slope âm)
    // -----------------------------------------------------------------
    bool              enableMASlopeFilter;     // Bật/tắt filter
+   bool              maSlopeCritical;         // Nếu true, fail = critical fail
    double            maSlopeThreshold;        // Góc tối thiểu (độ)
    int               slopeSmoothBars;         // Số nến tính smoothed slope (0 = 2-bar)
    double            maSlopeWeight;           // Trọng số điểm (0-100)
@@ -40,6 +41,7 @@ struct UnifiedScoringConfig
    // MACD: BUY nếu MACD > Signal, SELL nếu MACD < Signal
    // -----------------------------------------------------------------
    bool              enableMomentumFilter;    // Bật/tắt filter
+   bool              momentumCritical;        // Nếu true, fail = critical fail
    double            momentumWeight;          // Trọng số mỗi indicator pass
 
    // -----------------------------------------------------------------
@@ -49,6 +51,7 @@ struct UnifiedScoringConfig
    // SELL: Giá đóng cửa dưới SMA200
    // -----------------------------------------------------------------
    bool              enableSMA200Filter;      // Bật/tắt filter
+   bool              sma200Critical;          // Nếu true, fail = critical fail
    double            sma200Weight;            // Trọng số điểm
 
    // -----------------------------------------------------------------
@@ -58,9 +61,20 @@ struct UnifiedScoringConfig
    // SELL: Giá gần vùng resistance
    // -----------------------------------------------------------------
    bool              enableSRZoneFilter;      // Bật/tắt filter
+   bool              srZoneCritical;          // Nếu true, fail = critical fail
    double            srZonePercent;           // % vùng S/R cho phép (30 = 30%)
    double            srZoneWeight;            // Trọng số điểm
    int               srLookback;              // Số nến lookback tính S/R
+
+   // -----------------------------------------------------------------
+   // FILTER 4B: S/R MIN WIDTH (Độ rộng tối thiểu vùng S/R)
+   // Lọc các vùng S/R quá hẹp, tránh bị cắt SL nhanh
+   // Khoảng cách R-S phải >= minSRWidthATR * ATR
+   // -----------------------------------------------------------------
+   bool              enableSRMinWidthFilter;  // Bật/tắt filter
+   bool              srMinWidthCritical;      // Nếu true, fail = critical fail
+   double            minSRWidthATR;           // Độ rộng tối thiểu (bội số ATR, vd: 1.5 = 1.5*ATR)
+   double            srMinWidthWeight;        // Trọng số điểm
 
    // -----------------------------------------------------------------
    // FILTER 5: ADX (Sức mạnh xu hướng)
@@ -69,6 +83,7 @@ struct UnifiedScoringConfig
    // ADX < threshold = sideway, nên tránh
    // -----------------------------------------------------------------
    bool              enableADXFilter;         // Bật/tắt filter
+   bool              adxCritical;             // Nếu true, fail = critical fail
    double            minADXThreshold;         // Ngưỡng ADX tối thiểu (thường 20-25)
    bool              useADXDirectionalConfirm;// Kiểm tra thêm +DI/-DI
    double            adxWeight;               // Trọng số điểm
@@ -79,6 +94,7 @@ struct UnifiedScoringConfig
    // Body phải đủ lớn so với ATR để tránh nến indecision
    // -----------------------------------------------------------------
    bool              enableBodyATRFilter;     // Bật/tắt filter
+   bool              bodyATRCritical;         // Nếu true, fail = critical fail
    double            minBodyATRRatio;         // Tỷ lệ tối thiểu (0.3 = 30% ATR)
    int               atrLength;               // Chu kỳ tính ATR
    double            bodyATRWeight;           // Trọng số điểm
@@ -89,6 +105,7 @@ struct UnifiedScoringConfig
    // Volume cao = nhiều người tham gia = tín hiệu mạnh hơn
    // -----------------------------------------------------------------
    bool              enableVolumeFilter;      // Bật/tắt filter
+   bool              volumeCritical;          // Nếu true, fail = critical fail
    int               volumeAvgPeriod;         // Chu kỳ tính volume trung bình
    double            minVolumeRatio;          // Tỷ lệ tối thiểu (1.0 = 100%)
    double            volumeWeight;            // Trọng số điểm
@@ -99,6 +116,7 @@ struct UnifiedScoringConfig
    // Nếu quá xa = đã miss entry, không nên chase
    // -----------------------------------------------------------------
    bool              enablePriceMADistFilter; // Bật/tắt filter
+   bool              priceMADistCritical;     // Nếu true, fail = critical fail
    double            maxPriceMADistATR;       // Khoảng cách tối đa (bội số ATR)
    double            priceMADistWeight;       // Trọng số điểm
 
@@ -108,6 +126,7 @@ struct UnifiedScoringConfig
    // Tránh giờ ít thanh khoản hoặc spread cao
    // -----------------------------------------------------------------
    bool              enableTimeFilter;        // Bật/tắt filter
+   bool              timeCritical;            // Nếu true, fail = critical fail
    int               tradeStartHour;          // Giờ bắt đầu (0-23)
    int               tradeEndHour;            // Giờ kết thúc (0-23)
    double            timeWeight;              // Trọng số điểm
@@ -118,6 +137,7 @@ struct UnifiedScoringConfig
    // Sử dụng MQL5 Economic Calendar API
    // -----------------------------------------------------------------
    bool              enableNewsFilter;        // Bật/tắt filter
+   bool              newsCritical;            // Nếu true, fail = critical fail
    int               newsMinutesBefore;       // Phút trước tin cần tránh
    int               newsMinutesAfter;        // Phút sau tin cần tránh
    int               newsMinImportance;       // Mức quan trọng (1=Low, 2=Med, 3=High)
@@ -436,6 +456,69 @@ ScoringFilterResult CheckSRZoneFilter(
      {
       result.reason = StringFormat("Ngoài vùng S/R (Cl=%.5f, Lim=%.5f, S=%.5f, R=%.5f)",
                                    close[confirmIdx], limitPrice, outSupport, outResistance);
+     }
+
+   return result;
+  }
+
+//+------------------------------------------------------------------+
+//| FILTER 4B: S/R MIN WIDTH                                         |
+//| Kiểm tra độ rộng tối thiểu vùng S/R để tránh cắt SL nhanh        |
+//| Vùng S/R quá hẹp = rủi ro cao, dễ bị SL                          |
+//+------------------------------------------------------------------+
+ScoringFilterResult CheckSRMinWidthFilter(
+   const UnifiedScoringConfig &config,
+   int confirmIdx,
+   double support,
+   double resistance,
+   const double &high[],
+   const double &low[],
+   int arraySize,
+   double &outSRRangeATR
+)
+  {
+   ScoringFilterResult result;
+   result.passed = false;
+   result.score = 0;
+   result.reason = "";
+   result.value = 0;
+   outSRRangeATR = 0;
+
+   if(!config.enableSRMinWidthFilter)
+     {
+      result.passed = true;
+      return result;
+     }
+
+// Tính ATR
+   double atr = 0;
+   int atrBars = MathMin(config.atrLength, arraySize - confirmIdx - 1);
+   for(int i = 0; i < atrBars; i++)
+      atr += high[confirmIdx + i] - low[confirmIdx + i];
+   if(atrBars > 0)
+      atr = atr / atrBars;
+
+   if(atr <= 0)
+     {
+      result.passed = true;
+      return result;
+     }
+
+// Tính độ rộng vùng S/R theo bội số ATR
+   double srRange = resistance - support;
+   outSRRangeATR = srRange / atr;
+   result.value = outSRRangeATR;
+
+// Kiểm tra >= ngưỡng
+   if(outSRRangeATR >= config.minSRWidthATR)
+     {
+      result.passed = true;
+      result.score = config.srMinWidthWeight;
+     }
+   else
+     {
+      result.reason = StringFormat("S/R hẹp (%.1f ATR < %.1f ATR)",
+                                   outSRRangeATR, config.minSRWidthATR);
      }
 
    return result;
@@ -836,7 +919,11 @@ void RunUnifiedScoringFilters(
    filterResult = CheckMASlopeFilter(config, isBuySignal, confirmIdx, ma50, pointValue, arraySize);
    outResult.totalScore += filterResult.score;
    if(!filterResult.passed && filterResult.reason != "")
+     {
       outResult.allReasons += "- " + filterResult.reason + "\n";
+      if(config.maSlopeCritical)
+         outResult.hasCriticalFail = true;
+     }
 
 // -----------------------------------------------------------------
 // FILTER 2: MOMENTUM (RSI + MACD)
@@ -844,7 +931,11 @@ void RunUnifiedScoringFilters(
    filterResult = CheckMomentumFilter(config, isBuySignal, confirmIdx, rsi, macdMain, macdSignal);
    outResult.totalScore += filterResult.score;
    if(!filterResult.passed && filterResult.reason != "")
+     {
       outResult.allReasons += "- " + filterResult.reason + "\n";
+      if(config.momentumCritical)
+         outResult.hasCriticalFail = true;
+     }
 
 // -----------------------------------------------------------------
 // FILTER 3: SMA200 TREND
@@ -852,7 +943,11 @@ void RunUnifiedScoringFilters(
    filterResult = CheckSMA200Filter(config, isBuySignal, confirmIdx, close, sma200, tickSize);
    outResult.totalScore += filterResult.score;
    if(!filterResult.passed && filterResult.reason != "")
+     {
       outResult.allReasons += "- " + filterResult.reason + "\n";
+      if(config.sma200Critical)
+         outResult.hasCriticalFail = true;
+     }
 
 // -----------------------------------------------------------------
 // FILTER 4: S/R ZONE (Critical - tính S/R cho entry/SL/TP)
@@ -864,8 +959,8 @@ void RunUnifiedScoringFilters(
    outResult.support = support;
    outResult.resistance = resistance;
 
-// S/R không hợp lệ là critical fail
-   if(filterResult.reason == "S/R không hợp lệ")
+// S/R không hợp lệ là critical fail - DỪNG NGAY vì không thể tính tiếp
+   if(filterResult.reason == "Lỗi S/R")
      {
       outResult.allReasons += "- " + filterResult.reason + "\n";
       outResult.hasCriticalFail = true;
@@ -874,7 +969,25 @@ void RunUnifiedScoringFilters(
 
    outResult.totalScore += filterResult.score;
    if(!filterResult.passed && filterResult.reason != "")
+     {
       outResult.allReasons += "- " + filterResult.reason + "\n";
+      if(config.srZoneCritical)
+         outResult.hasCriticalFail = true;
+     }
+
+// -----------------------------------------------------------------
+// FILTER 4B: S/R MIN WIDTH (lọc vùng S/R quá hẹp)
+// -----------------------------------------------------------------
+   double srRangeATR = 0;
+   filterResult = CheckSRMinWidthFilter(config, confirmIdx, support, resistance,
+                                        high, low, arraySize, srRangeATR);
+   outResult.totalScore += filterResult.score;
+   if(!filterResult.passed && filterResult.reason != "")
+     {
+      outResult.allReasons += "- " + filterResult.reason + "\n";
+      if(config.srMinWidthCritical)
+         outResult.hasCriticalFail = true;
+     }
 
 // -----------------------------------------------------------------
 // FILTER 5: ADX
@@ -883,7 +996,11 @@ void RunUnifiedScoringFilters(
                                  adxMain, adxPlusDI, adxMinusDI);
    outResult.totalScore += filterResult.score;
    if(!filterResult.passed && filterResult.reason != "")
+     {
       outResult.allReasons += "- " + filterResult.reason + "\n";
+      if(config.adxCritical)
+         outResult.hasCriticalFail = true;
+     }
 
 // -----------------------------------------------------------------
 // FILTER 6: BODY/ATR RATIO
@@ -891,7 +1008,11 @@ void RunUnifiedScoringFilters(
    filterResult = CheckBodyATRFilter(config, confirmIdx, open, close, high, low, arraySize);
    outResult.totalScore += filterResult.score;
    if(!filterResult.passed && filterResult.reason != "")
+     {
       outResult.allReasons += "- " + filterResult.reason + "\n";
+      if(config.bodyATRCritical)
+         outResult.hasCriticalFail = true;
+     }
 
 // -----------------------------------------------------------------
 // FILTER 7: VOLUME
@@ -899,7 +1020,11 @@ void RunUnifiedScoringFilters(
    filterResult = CheckVolumeFilter(config, confirmIdx, volume, arraySize);
    outResult.totalScore += filterResult.score;
    if(!filterResult.passed && filterResult.reason != "")
+     {
       outResult.allReasons += "- " + filterResult.reason + "\n";
+      if(config.volumeCritical)
+         outResult.hasCriticalFail = true;
+     }
 
 // -----------------------------------------------------------------
 // FILTER 8: PRICE-MA DISTANCE
@@ -907,7 +1032,11 @@ void RunUnifiedScoringFilters(
    filterResult = CheckPriceMADistFilter(config, confirmIdx, close, high, low, ma50, arraySize);
    outResult.totalScore += filterResult.score;
    if(!filterResult.passed && filterResult.reason != "")
+     {
       outResult.allReasons += "- " + filterResult.reason + "\n";
+      if(config.priceMADistCritical)
+         outResult.hasCriticalFail = true;
+     }
 
 // -----------------------------------------------------------------
 // FILTER 9: TIME
@@ -915,7 +1044,11 @@ void RunUnifiedScoringFilters(
    filterResult = CheckTimeFilter(config, currentTime);
    outResult.totalScore += filterResult.score;
    if(!filterResult.passed && filterResult.reason != "")
+     {
       outResult.allReasons += "- " + filterResult.reason + "\n";
+      if(config.timeCritical)
+         outResult.hasCriticalFail = true;
+     }
 
 // -----------------------------------------------------------------
 // FILTER 10: NEWS
@@ -923,7 +1056,11 @@ void RunUnifiedScoringFilters(
    filterResult = CheckNewsFilter(config, symbol, currentTime);
    outResult.totalScore += filterResult.score;
    if(!filterResult.passed && filterResult.reason != "")
+     {
       outResult.allReasons += "- " + filterResult.reason + "\n";
+      if(config.newsCritical)
+         outResult.hasCriticalFail = true;
+     }
 
 // -----------------------------------------------------------------
 // ĐÁNH GIÁ KẾT QUẢ CUỐI CÙNG

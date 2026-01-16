@@ -62,6 +62,12 @@ struct SMAPullbackConfig
    int               srLookback;
    double            srZonePercent;     // % vùng giá cho phép
 
+   // S/R Min Width Filter
+   bool              enableSRMinWidthFilter;  // Bật/tắt filter độ rộng S/R tối thiểu
+   bool              srMinWidthCritical;      // Nếu true, fail = critical fail
+   double            minSRWidthATR;           // Độ rộng tối thiểu (bội số ATR)
+   double            srMinWidthWeight;        // Trọng số điểm
+
    // Pullback
    int               maxWaitBars;
    int               atrLength;
@@ -79,28 +85,34 @@ struct SMAPullbackConfig
 
    // Filter: ADX Trend Strength
    bool              enableADXFilter;           // Bật/tắt ADX filter
+   bool              adxCritical;               // Nếu true, fail = critical fail
    int               adxPeriod;                 // Chu kỳ ADX (thường = 14)
    double            minADXThreshold;           // Ngưỡng ADX tối thiểu (20-25 để xác định trending)
    bool              useADXDirectionalConfirm;  // true = kiểm tra +DI/-DI theo hướng signal
 
    // Filter: Body/ATR Ratio
    bool              enableBodyATRFilter;       // Bật/tắt Body/ATR filter
+   bool              bodyATRCritical;           // Nếu true, fail = critical fail
    double            minBodyATRRatio;           // Tỷ lệ body/ATR tối thiểu (0.3 = 30% ATR)
 
    // Filter: Volume Confirmation
    bool              enableVolumeFilter;        // Bật/tắt Volume filter
+   bool              volumeCritical;            // Nếu true, fail = critical fail
    int               volumeAvgPeriod;           // Chu kỳ tính volume trung bình
    double            minVolumeRatio;            // Tỷ lệ volume/avg volume tối thiểu (1.0 = 100%)
 
    // Filter: Price-MA Distance (tránh chase)
    bool              enablePriceMADistanceFilter; // Bật/tắt filter
+   bool              priceMADistCritical;         // Nếu true, fail = critical fail
    double            maxPriceMADistanceATR;       // Khoảng cách tối đa (bội số ATR, ví dụ 2.0 = 2*ATR)
 
    // Filter: Time/News Filter
    bool              enableTimeFilter;          // Bật/tắt Time filter
+   bool              timeCritical;              // Nếu true, fail = critical fail
    int               tradeStartHour;            // Giờ bắt đầu được phép trade (0-23, server time)
    int               tradeEndHour;              // Giờ kết thúc được phép trade (0-23, server time)
    bool              enableNewsFilter;          // Bật/tắt News filter (MQL5 Calendar)
+   bool              newsCritical;              // Nếu true, fail = critical fail
    int               newsMinutesBefore;         // Số phút trước tin quan trọng cần tránh
    int               newsMinutesAfter;          // Số phút sau tin quan trọng cần tránh
    int               newsMinImportance;         // Mức độ quan trọng tối thiểu (1=Low, 2=Medium, 3=High)
@@ -112,12 +124,16 @@ struct SMAPullbackConfig
 
    // Signal Scoring Filters (configurable weights)
    bool              enableMASlopeFilter;         // Bật/tắt MA Slope filter
+   bool              maSlopeCritical;             // Nếu true, fail = critical fail
    double            maSlopeWeight;               // Trọng số MA Slope (default 10)
    bool              enableMomentumFilter;        // Bật/tắt Momentum filter
+   bool              momentumCritical;            // Nếu true, fail = critical fail
    double            momentumWeight;              // Trọng số mỗi momentum indicator (default 30)
    bool              enableSMA200Filter;          // Bật/tắt SMA200 filter
+   bool              sma200Critical;              // Nếu true, fail = critical fail
    double            sma200Weight;                // Trọng số SMA200 (default 10)
    bool              enableSRZoneFilter;          // Bật/tắt S/R Zone filter
+   bool              srZoneCritical;              // Nếu true, fail = critical fail
    double            srZoneWeight;                // Trọng số S/R Zone (default 20)
    double            adxWeight;                   // Trọng số ADX (default 10)
    double            bodyATRWeight;               // Trọng số Body/ATR (default 5)
@@ -198,46 +214,61 @@ void ProcessSignal(
    UnifiedScoringConfig uniConfig;
 
    uniConfig.enableMASlopeFilter = config.enableMASlopeFilter;
+   uniConfig.maSlopeCritical = config.maSlopeCritical;
    uniConfig.maSlopeThreshold = config.ma50SlopeThreshold;
    uniConfig.slopeSmoothBars = config.slopeSmoothBars;
    uniConfig.maSlopeWeight = config.maSlopeWeight;
 
    uniConfig.enableMomentumFilter = config.enableMomentumFilter;
+   uniConfig.momentumCritical = config.momentumCritical;
    uniConfig.momentumWeight = config.momentumWeight;
 
    uniConfig.enableSMA200Filter = config.enableSMA200Filter;
+   uniConfig.sma200Critical = config.sma200Critical;
    uniConfig.sma200Weight = config.sma200Weight;
 
    uniConfig.enableSRZoneFilter = config.enableSRZoneFilter;
+   uniConfig.srZoneCritical = config.srZoneCritical;
    uniConfig.srZonePercent = config.srZonePercent;
    uniConfig.srZoneWeight = config.srZoneWeight;
    uniConfig.srLookback = config.srLookback;
 
+   uniConfig.enableSRMinWidthFilter = config.enableSRMinWidthFilter;
+   uniConfig.srMinWidthCritical = config.srMinWidthCritical;
+   uniConfig.minSRWidthATR = config.minSRWidthATR;
+   uniConfig.srMinWidthWeight = config.srMinWidthWeight;
+
    uniConfig.enableADXFilter = config.enableADXFilter;
+   uniConfig.adxCritical = config.adxCritical;
    uniConfig.minADXThreshold = config.minADXThreshold;
    uniConfig.useADXDirectionalConfirm = config.useADXDirectionalConfirm;
    uniConfig.adxWeight = config.adxWeight;
 
    uniConfig.enableBodyATRFilter = config.enableBodyATRFilter;
+   uniConfig.bodyATRCritical = config.bodyATRCritical;
    uniConfig.minBodyATRRatio = config.minBodyATRRatio;
    uniConfig.atrLength = config.atrLength;
    uniConfig.bodyATRWeight = config.bodyATRWeight;
 
    uniConfig.enableVolumeFilter = config.enableVolumeFilter;
+   uniConfig.volumeCritical = config.volumeCritical;
    uniConfig.volumeAvgPeriod = config.volumeAvgPeriod;
    uniConfig.minVolumeRatio = config.minVolumeRatio;
    uniConfig.volumeWeight = config.volumeWeight;
 
    uniConfig.enablePriceMADistFilter = config.enablePriceMADistanceFilter;
+   uniConfig.priceMADistCritical = config.priceMADistCritical;
    uniConfig.maxPriceMADistATR = config.maxPriceMADistanceATR;
    uniConfig.priceMADistWeight = config.priceMADistWeight;
 
    uniConfig.enableTimeFilter = config.enableTimeFilter;
+   uniConfig.timeCritical = config.timeCritical;
    uniConfig.tradeStartHour = config.tradeStartHour;
    uniConfig.tradeEndHour = config.tradeEndHour;
    uniConfig.timeWeight = config.timeWeight;
 
    uniConfig.enableNewsFilter = config.enableNewsFilter;
+   uniConfig.newsCritical = config.newsCritical;
    uniConfig.newsMinutesBefore = config.newsMinutesBefore;
    uniConfig.newsMinutesAfter = config.newsMinutesAfter;
    uniConfig.newsMinImportance = config.newsMinImportance;
