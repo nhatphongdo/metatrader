@@ -162,8 +162,6 @@ input double   InpPriceMAWeight           = 10.0;   // [Filter: Price-MA Distanc
 // ============== DISPLAY SETTINGS ==================
 // ==================================================
 
-input int      InpLineLengthBars = 10;              // Độ dài đường SL / TP (số nến)
-
 // --- COLORS ---
 input color    InpBuyColor     = clrLime;           // Màu tín hiệu BUY
 input color    InpSellColor    = clrRed;            // Màu tín hiệu SELL
@@ -186,16 +184,6 @@ input bool     InpAutoAddIndicators = true;         // Tự động thêm SMA/RS
 // ================= BIẾN TOÀN CỤC ===================
 // ==================================================
 
-// Struct để lưu tooltip data đầy đủ cho mỗi signal
-struct SignalTooltipData
-  {
-   string            objectId;      // ID của object (dùng để match)
-   string            fullTooltip;   // Nội dung đầy đủ hiển thị khi click
-  };
-
-SignalTooltipData g_tooltipData[];   // Mảng lưu tất cả tooltip
-int               g_tooltipCount = 0;
-
 datetime g_lastProcessedBarTime = 0;
 string   OBJ_PREFIX = "SIG_";
 int      hSMA50;
@@ -207,6 +195,7 @@ int      g_nextAllowedCutIdx = -1;
 double   g_tickSize;
 double   g_pointValue;
 SMAPullbackConfig g_config;
+SignalDrawConfig g_drawConfig;
 
 
 // ==================================================
@@ -377,6 +366,19 @@ int OnInit()
    g_pointValue = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
    g_nextAllowedCutIdx = -1;
 
+// Khởi tạo draw config với màu sắc từ input
+   InitDefaultSignalDrawConfig(g_drawConfig, OBJ_PREFIX);
+   g_drawConfig.buyColor = InpBuyColor;
+   g_drawConfig.sellColor = InpSellColor;
+   g_drawConfig.slColor = InpSLColor;
+   g_drawConfig.tpColor = InpTPColor;
+   g_drawConfig.strongColor = InpStrongColor;
+   g_drawConfig.weakColor = InpWeakColor;
+   g_drawConfig.supportColor = InpSupportColor;
+   g_drawConfig.resistColor = InpResistColor;
+   g_drawConfig.cancelColor = InpCancelColor;
+   g_drawConfig.lineLengthBars = InpMaxWaitBars;
+
 // Tự động thêm indicators lên chart
    if(InpAutoAddIndicators)
       AddIndicatorsToChart();
@@ -399,8 +401,7 @@ void OnDeinit(const int reason)
    RemoveIndicatorsFromChart();
 
 // Clear tooltip data
-   ArrayResize(g_tooltipData, 0);
-   g_tooltipCount = 0;
+   ClearSignalTooltips(OBJ_PREFIX);
   }
 
 // ==================================================
@@ -408,56 +409,8 @@ void OnDeinit(const int reason)
 // ==================================================
 void OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam)
   {
-// Xử lý khi click vào object
-   if(id == CHARTEVENT_OBJECT_CLICK)
-     {
-      // Kiểm tra xem object có thuộc indicator này không
-      if(StringFind(sparam, OBJ_PREFIX) == 0)
-        {
-         // Tìm tooltip data cho object này
-         string baseId = sparam;
-         // Loại bỏ suffix - QUAN TRỌNG: check _SL trước _S, _AR trước _R
-         int pos = StringFind(baseId, "_DIA");
-         if(pos > 0)
-            baseId = StringSubstr(baseId, 0, pos);
-         pos = StringFind(baseId, "_LBL");
-         if(pos > 0)
-            baseId = StringSubstr(baseId, 0, pos);
-         pos = StringFind(baseId, "_SL");
-         if(pos > 0)
-            baseId = StringSubstr(baseId, 0, pos);
-         pos = StringFind(baseId, "_TP");
-         if(pos > 0)
-            baseId = StringSubstr(baseId, 0, pos);
-         pos = StringFind(baseId, "_AR");
-         if(pos > 0)
-            baseId = StringSubstr(baseId, 0, pos);
-         pos = StringFind(baseId, "_S");
-         if(pos > 0)
-            baseId = StringSubstr(baseId, 0, pos);
-         pos = StringFind(baseId, "_R");
-         if(pos > 0)
-            baseId = StringSubstr(baseId, 0, pos);
-
-         // Tìm trong mảng tooltip
-         for(int i = 0; i < g_tooltipCount; i++)
-           {
-            if(g_tooltipData[i].objectId == baseId)
-              {
-               Comment(g_tooltipData[i].fullTooltip);
-               ChartRedraw();
-               return;
-              }
-           }
-        }
-     }
-// Click vào vùng trống - xóa comment
-   else
-      if(id == CHARTEVENT_CLICK)
-        {
-         Comment("");
-         ChartRedraw();
-        }
+// Dùng hàm xử lý từ Utility
+   HandleSignalChartEvent(id, lparam, dparam, sparam, OBJ_PREFIX);
   }
 
 // ==================================================
@@ -683,15 +636,15 @@ int OnCalculate(
                     g_tickSize, g_pointValue, copyCount, scanResult);
 
       // Vẽ marker đánh dấu nến cắt SMA (chỉ khi không bị noise filter)
-      DrawCutCandle(cutUpToBottom, time[cutIdx], cutUpToBottom ? low[cutIdx] : high[cutIdx], sma50[cutIdx], "");
+      DrawCutCandleMarker(g_drawConfig, cutUpToBottom, time[cutIdx], cutUpToBottom ? low[cutIdx] : high[cutIdx], sma50[cutIdx], "");
 
       if(scanResult.found)
         {
          // Signal found - vẽ lên chart
-         DrawSignal(scanResult.isBuy, false, time[scanResult.confirmIdx], cutIdx - scanResult.confirmIdx,
-                    scanResult.signal.entry, scanResult.signal.sl, scanResult.signal.tp,
-                    scanResult.signal.strength, scanResult.signal.score, scanResult.signal.reasons,
-                    scanResult.signal.support, scanResult.signal.resistance);
+         DrawSignalMarker(g_drawConfig, scanResult.isBuy, false, time[scanResult.confirmIdx], cutIdx - scanResult.confirmIdx,
+                          scanResult.signal.entry, scanResult.signal.sl, scanResult.signal.tp,
+                          scanResult.signal.strength, scanResult.signal.score, scanResult.signal.reasons,
+                          scanResult.signal.support, scanResult.signal.resistance, g_pointValue, _Period);
          g_nextAllowedCutIdx = scanResult.confirmIdx;
 
          // Alert / Push Notification nếu được bật
@@ -716,179 +669,14 @@ int OnCalculate(
          if(scanResult.cancelled)
            {
             // Signal cancelled - vẽ cancelled marker
-            DrawSignal(scanResult.isBuy, true, time[scanResult.confirmIdx], 0,
-                       close[scanResult.confirmIdx], 0, 0, "", 0, scanResult.cancelReason, 0, 0);
+            DrawSignalMarker(g_drawConfig, scanResult.isBuy, true, time[scanResult.confirmIdx], 0,
+                             close[scanResult.confirmIdx], 0, 0, "", 0, scanResult.cancelReason,
+                             0, 0, g_pointValue, _Period);
             g_nextAllowedCutIdx = scanResult.confirmIdx;
            }
      }
 
    ChartRedraw();
    return rates_total;
-  }
-
-// ==================================================
-// =================== DRAW SIGNAL ===================
-// ==================================================
-void DrawSignal(
-   bool     isBuy,
-   bool     isCanceled,
-   datetime signalTime,
-   int      signalLength,
-   double   entryPrice,
-   double   slPrice,
-   double   tpPrice,
-   string   strengthText,
-   double   score,
-   string   reasons,
-   double   support,
-   double   resistance
-)
-  {
-   string id = OBJ_PREFIX + IntegerToString(signalTime);
-   if(ObjectFind(0, id + "_AR") >= 0)
-      return;
-
-   datetime endTime = signalTime + MathMin(InpLineLengthBars, signalLength) * PeriodSeconds(_Period);
-
-// Entry Arrow
-   ObjectCreate(0, id+"_AR", OBJ_ARROW, 0, signalTime, entryPrice);
-   ObjectSetInteger(0, id+"_AR", OBJPROP_ARROWCODE, isCanceled ? 251 : (isBuy ? 233 : 234));
-   ObjectSetInteger(0, id+"_AR", OBJPROP_COLOR, isCanceled ? InpCancelColor : (isBuy ? InpBuyColor : InpSellColor));
-   ObjectSetInteger(0, id+"_AR", OBJPROP_WIDTH, 2);
-
-// Stop Loss Line
-   if(slPrice > 0)
-     {
-      ObjectCreate(0, id+"_SL", OBJ_TREND, 0, signalTime, slPrice, endTime, slPrice);
-      ObjectSetInteger(0, id+"_SL", OBJPROP_COLOR, InpSLColor);
-      ObjectSetInteger(0, id+"_SL", OBJPROP_RAY, false);
-      ObjectSetInteger(0, id+"_SL", OBJPROP_WIDTH, 2);
-      ObjectSetInteger(0, id+"_SL", OBJPROP_STYLE, STYLE_SOLID);
-     }
-
-// Take Profit Line
-   if(tpPrice > 0)
-     {
-      ObjectCreate(0, id+"_TP", OBJ_TREND, 0, signalTime, tpPrice, endTime, tpPrice);
-      ObjectSetInteger(0, id+"_TP", OBJPROP_COLOR, InpTPColor);
-      ObjectSetInteger(0, id+"_TP", OBJPROP_RAY, false);
-      ObjectSetInteger(0, id+"_TP", OBJPROP_WIDTH, 2);
-      ObjectSetInteger(0, id+"_TP", OBJPROP_STYLE, STYLE_SOLID);
-     }
-
-// Signal Strength Label + Tooltip
-   string signalType = isBuy ? "BUY" : "SELL";
-   color labelColor = (strengthText == "STRONG") ? InpStrongColor : InpWeakColor;
-
-// Tính khoảng cách SL và TP theo points
-   int slPoints = (int)(MathAbs(entryPrice - slPrice) / g_pointValue);
-   int tpPoints = (int)(MathAbs(tpPrice - entryPrice) / g_pointValue);
-
-// Tạo tooltip text (hiển thị khi hover)
-   string tooltipText = StringFormat("%s %s (Điểm: %.1f)\nVào: %.5f\nSL: %d pts (%.5f)\nTP: %d pts (%.5f)",
-                                     signalType, strengthText, score, entryPrice,
-                                     slPoints, slPrice, tpPoints, tpPrice);
-   if(reasons != "")
-      tooltipText += "\nCảnh báo:\n" + reasons;
-
-   SignalTooltipData tooltipData;
-   tooltipData.objectId = id;
-   tooltipData.fullTooltip = tooltipText;
-   ++g_tooltipCount;
-   ArrayResize(g_tooltipData, g_tooltipCount);
-   g_tooltipData[g_tooltipCount - 1] = tooltipData;
-
-
-// Label hiển thị STRONG/WEAK
-   if(!isCanceled)
-     {
-      double labelPrice = isBuy ? entryPrice + (tpPrice - entryPrice) * 0.1
-                          : entryPrice - (entryPrice - tpPrice) * 0.1;
-      datetime labelTime = signalTime - PeriodSeconds(_Period);
-      ObjectCreate(0, id+"_LBL", OBJ_TEXT, 0, labelTime, labelPrice);
-      ObjectSetString(0, id+"_LBL", OBJPROP_TEXT, strengthText);
-      ObjectSetInteger(0, id+"_LBL", OBJPROP_COLOR, labelColor);
-      ObjectSetInteger(0, id+"_LBL", OBJPROP_FONTSIZE, 10);
-      ObjectSetString(0, id+"_LBL", OBJPROP_FONT, "Arial Bold");
-      ObjectSetString(0, id+"_LBL", OBJPROP_TOOLTIP, tooltipText);
-     }
-
-// Thêm tooltip cho Arrow
-   ObjectSetString(0, id+"_AR", OBJPROP_TOOLTIP, tooltipText);
-
-// Thêm tooltip cho SL line
-   if(slPrice > 0)
-     {
-      ObjectSetString(0, id+"_SL", OBJPROP_TOOLTIP, StringFormat("Stop Loss: %.5f (%d pts)", slPrice, slPoints));
-     }
-
-// Thêm tooltip cho TP line
-   if(tpPrice > 0)
-     {
-      ObjectSetString(0, id+"_TP", OBJPROP_TOOLTIP, StringFormat("Take Profit: %.5f (%d pts)", tpPrice, tpPoints));
-     }
-
-// S/R Zone Boxes - Vẽ cả 2 vùng Support và Resistance
-   if(isBuy && support > 0)
-     {
-      // BUY: Vùng Support (xanh) từ support đến entry
-      ObjectCreate(0, id+"_S", OBJ_RECTANGLE, 0, signalTime, support, endTime, entryPrice);
-      ObjectSetInteger(0, id+"_S", OBJPROP_COLOR, InpResistColor);
-      ObjectSetInteger(0, id+"_S", OBJPROP_FILL, true);
-      ObjectSetInteger(0, id+"_S", OBJPROP_BACK, true);
-      ObjectSetString(0, id+"_S", OBJPROP_TOOLTIP, StringFormat("Vùng Hỗ Trợ: %.5f - %.5f", support, entryPrice));
-
-      // BUY: Vùng Resistance (đỏ) từ entry đến resistance
-      ObjectCreate(0, id+"_R", OBJ_RECTANGLE, 0, signalTime, entryPrice, endTime, resistance);
-      ObjectSetInteger(0, id+"_R", OBJPROP_COLOR, InpSupportColor);
-      ObjectSetInteger(0, id+"_R", OBJPROP_FILL, true);
-      ObjectSetInteger(0, id+"_R", OBJPROP_BACK, true);
-      ObjectSetString(0, id+"_R", OBJPROP_TOOLTIP, StringFormat("Vùng Kháng Cự: %.5f - %.5f", entryPrice, resistance));
-     }
-   else
-      if(!isBuy && resistance > 0)
-        {
-         // SELL: Vùng Resistance (đỏ) từ resistance đến entry
-         ObjectCreate(0, id+"_R", OBJ_RECTANGLE, 0, signalTime, resistance, endTime, entryPrice);
-         ObjectSetInteger(0, id+"_R", OBJPROP_COLOR, InpResistColor);
-         ObjectSetInteger(0, id+"_R", OBJPROP_FILL, true);
-         ObjectSetInteger(0, id+"_R", OBJPROP_BACK, true);
-         ObjectSetString(0, id+"_R", OBJPROP_TOOLTIP, StringFormat("Vùng Kháng Cự: %.5f - %.5f", resistance, entryPrice));
-
-         // SELL: Vùng Support (xanh) từ entry đến support
-         ObjectCreate(0, id+"_S", OBJ_RECTANGLE, 0, signalTime, entryPrice, endTime, support);
-         ObjectSetInteger(0, id+"_S", OBJPROP_COLOR, InpSupportColor);
-         ObjectSetInteger(0, id+"_S", OBJPROP_FILL, true);
-         ObjectSetInteger(0, id+"_S", OBJPROP_BACK, true);
-         ObjectSetString(0, id+"_S", OBJPROP_TOOLTIP, StringFormat("Vùng Hỗ Trợ: %.5f - %.5f", entryPrice, support));
-        }
-  }
-
-// ==================================================
-// ============= DRAW CUT CANDLE MARKER =============
-// ==================================================
-void DrawCutCandle(
-   bool     isBuy,
-   datetime cutTime,
-   double   price,
-   double   sma,
-   string   filterReason
-)
-  {
-   string id = OBJ_PREFIX + "CUT_" + IntegerToString(cutTime);
-   if(ObjectFind(0, id + "_DIA") >= 0)
-      return;
-
-// Diamond marker để đánh dấu nến cắt SMA
-   ObjectCreate(0, id+"_DIA", OBJ_ARROW, 0, cutTime, price);
-   ObjectSetInteger(0, id+"_DIA", OBJPROP_ARROWCODE, filterReason == "" ? 117 : 78); // Diamond shape (Wingdings) or skull (Wingdings)
-   ObjectSetInteger(0, id+"_DIA", OBJPROP_COLOR, filterReason == "" ? (isBuy ? clrDodgerBlue : clrMagenta) : clrDarkGray);
-   ObjectSetInteger(0, id+"_DIA", OBJPROP_WIDTH, 2);
-   ObjectSetInteger(0, id+"_DIA", OBJPROP_ANCHOR, isBuy ? ANCHOR_TOP : ANCHOR_BOTTOM);
-
-// Tooltip
-   string signalType = filterReason == "" ? (isBuy ? "Setup BUY" : "Setup SELL") : (isBuy ? "Bỏ qua BUY" : "Bỏ qua SELL");
-   string tooltip = filterReason == "" ? StringFormat("%s - Nến cắt SMA = %.5f", signalType, sma) : StringFormat("%s - Nến cắt SMA = %.5f lọc do: %s", signalType, sma, filterReason);
-   ObjectSetString(0, id+"_DIA", OBJPROP_TOOLTIP, tooltip);
   }
 //+------------------------------------------------------------------+

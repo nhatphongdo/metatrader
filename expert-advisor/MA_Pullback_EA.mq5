@@ -32,6 +32,9 @@ input int      InpMagicNumber     = 123456;         // Magic Number
 input double   InpMaxSpread       = 20.0;           // Spread tối đa (points, ~2 pips for 5-digit)
 input string   InpTradeComment    = "SMA_Pullback_EA"; // Comment lệnh
 
+// --- DRAWING SETTINGS (Vẽ signal lên chart) ---
+input bool     InpEnableDrawSignal = true;          // Bật vẽ signal lên chart
+
 // --- TRADE LIMITS ---
 input double   InpMinStopLoss      = 50.0;           // Số points StopLoss tối thiểu (5 pips)
 input double   InpRiskRewardRate   = 1.5;            // Tỷ lệ Reward / Risk (1.5 = 1.5R)
@@ -217,6 +220,8 @@ datetime       g_lastSignalTime = 0;  // Thời gian của signal cuối cùng
 double         g_tickSize;
 double         g_pointValue;
 SMAPullbackConfig g_config;
+SignalDrawConfig  g_drawConfig;  // Config cho drawing utilities
+string            EA_OBJ_PREFIX = "EA_SIG_";  // Prefix cho EA objects
 
 // Consecutive Losses tracking
 int            g_consecutiveLosses = 0;   // Số lệnh thua liên tiếp
@@ -431,6 +436,13 @@ int OnInit()
    g_consecutiveLosses = 0;
    g_pauseUntil = 0;
 
+// Khởi tạo draw config cho EA
+   if(InpEnableDrawSignal)
+     {
+      InitDefaultSignalDrawConfig(g_drawConfig, EA_OBJ_PREFIX);
+      g_drawConfig.lineLengthBars = g_config.maxWaitBars;
+     }
+
    Print("EA đã khởi tạo. AutoTrade: ", InpAutoTrade ? "ON" : "OFF");
    PrintFiltersStatus();
    return INIT_SUCCEEDED;
@@ -480,12 +492,36 @@ void PrintFiltersStatus()
 // ==================================================
 void OnDeinit(const int reason)
   {
+   Comment("");  // Xóa comment box
    IndicatorRelease(hSMA50);
    IndicatorRelease(hSMA200);
    IndicatorRelease(hRSI);
    IndicatorRelease(hMACD);
    IndicatorRelease(hADX);
+
+// Xóa tất cả signal objects khi EA bị tắt
+   if(InpEnableDrawSignal)
+     {
+      DeleteAllSignalObjects(EA_OBJ_PREFIX);
+     }
+
+// Clear tooltip data
+   ClearSignalTooltips(EA_OBJ_PREFIX);
+
    Print("EA đã hủy");
+  }
+
+// ==================================================
+// =============== ON CHART EVENT ====================
+// ==================================================
+void OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam)
+  {
+// Bỏ qua nếu không bật vẽ signal
+   if(!InpEnableDrawSignal)
+      return;
+
+// Dùng hàm xử lý tập trung từ Utility
+   HandleSignalChartEvent(id, lparam, dparam, sparam, EA_OBJ_PREFIX);
   }
 
 // ==================================================
@@ -632,6 +668,14 @@ void OnTick()
       if(!cutUpToBottom && !cutDownToTop)
          continue;
 
+      // Vẽ cut candle marker (nếu bật)
+      if(InpEnableDrawSignal)
+        {
+         DrawCutCandleMarker(g_drawConfig, cutUpToBottom, time[cutIdx],
+                             cutUpToBottom ? low[cutIdx] : high[cutIdx],
+                             sma50[cutIdx], "");
+        }
+
       // Scan for signal
       ScanResult scanResult;
       ScanForSignal(g_config, cutIdx, cutUpToBottom, _Symbol, time[0],
@@ -642,6 +686,18 @@ void OnTick()
 
       if(scanResult.found)
         {
+         // Vẽ signal lên chart (nếu bật)
+         if(InpEnableDrawSignal)
+           {
+            DrawSignalMarker(g_drawConfig, scanResult.isBuy, false,
+                             time[scanResult.confirmIdx], cutIdx - scanResult.confirmIdx,
+                             scanResult.signal.entry, scanResult.signal.sl, scanResult.signal.tp,
+                             scanResult.signal.strength, scanResult.signal.score,
+                             scanResult.signal.reasons,
+                             scanResult.signal.support, scanResult.signal.resistance,
+                             g_pointValue, _Period);
+           }
+
          // Chỉ trade nếu signal xác nhận tại nến vừa đóng (index = 1)
          if(scanResult.confirmIdx == 1)
            {
@@ -667,6 +723,16 @@ void OnTick()
       else
          if(scanResult.cancelled)
            {
+            // Vẽ cancelled signal (nếu bật)
+            if(InpEnableDrawSignal)
+              {
+               DrawSignalMarker(g_drawConfig, scanResult.isBuy, true,
+                                time[scanResult.confirmIdx], 0,
+                                close[scanResult.confirmIdx], 0, 0,
+                                "", 0, scanResult.cancelReason,
+                                0, 0, g_pointValue, _Period);
+              }
+
             // Lưu thời gian để bỏ qua nến cắt đã cancelled
             g_lastSignalTime = time[scanResult.confirmIdx];
            }
