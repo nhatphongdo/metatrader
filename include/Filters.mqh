@@ -346,8 +346,8 @@ ScoringFilterResult CheckSMA200Filter(
      }
    else
      {
-      result.reason = StringFormat("Sai SMA%d (Close=%.5f, SMA%d=%.5f)",
-                                   config.sma200Weight, close[confirmIdx], config.sma200Weight, sma200[confirmIdx]);
+      result.reason = StringFormat("Sai MA (Close=%.5f, MA Slow=%.5f)",
+                                   close[confirmIdx], sma200[confirmIdx]);
      }
 
    return result;

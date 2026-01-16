@@ -120,6 +120,16 @@ input bool     InpAutoAddIndicators = true;         // Tự động thêm SMA/RS
 // ================= BIẾN TOÀN CỤC ===================
 // ==================================================
 
+// Struct để lưu tooltip data đầy đủ cho mỗi signal
+struct SignalTooltipData
+  {
+   string            objectId;      // ID của object (dùng để match)
+   string            fullTooltip;   // Nội dung đầy đủ hiển thị khi click
+  };
+
+SignalTooltipData g_tooltipData[];   // Mảng lưu tất cả tooltip
+int               g_tooltipCount = 0;
+
 datetime g_lastProcessedBarTime = 0;
 string   OBJ_PREFIX = "SIG_";
 int      hSMA50;
@@ -254,6 +264,7 @@ int OnInit()
 // ==================================================
 void OnDeinit(const int reason)
   {
+   Comment("");  // Xóa comment box
    ObjectsDeleteAll(0, OBJ_PREFIX);
    IndicatorRelease(hSMA50);
    IndicatorRelease(hSMA200);
@@ -263,6 +274,67 @@ void OnDeinit(const int reason)
 
 // Xóa chart indicators nếu đã thêm
    RemoveIndicatorsFromChart();
+
+// Clear tooltip data
+   ArrayResize(g_tooltipData, 0);
+   g_tooltipCount = 0;
+  }
+
+// ==================================================
+// =============== ON CHART EVENT ====================
+// ==================================================
+void OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam)
+  {
+// Xử lý khi click vào object
+   if(id == CHARTEVENT_OBJECT_CLICK)
+     {
+      // Kiểm tra xem object có thuộc indicator này không
+      if(StringFind(sparam, OBJ_PREFIX) == 0)
+        {
+         // Tìm tooltip data cho object này
+         string baseId = sparam;
+         // Loại bỏ suffix - QUAN TRỌNG: check _SL trước _S, _AR trước _R
+         int pos = StringFind(baseId, "_DIA");
+         if(pos > 0)
+            baseId = StringSubstr(baseId, 0, pos);
+         pos = StringFind(baseId, "_LBL");
+         if(pos > 0)
+            baseId = StringSubstr(baseId, 0, pos);
+         pos = StringFind(baseId, "_SL");
+         if(pos > 0)
+            baseId = StringSubstr(baseId, 0, pos);
+         pos = StringFind(baseId, "_TP");
+         if(pos > 0)
+            baseId = StringSubstr(baseId, 0, pos);
+         pos = StringFind(baseId, "_AR");
+         if(pos > 0)
+            baseId = StringSubstr(baseId, 0, pos);
+         pos = StringFind(baseId, "_S");
+         if(pos > 0)
+            baseId = StringSubstr(baseId, 0, pos);
+         pos = StringFind(baseId, "_R");
+         if(pos > 0)
+            baseId = StringSubstr(baseId, 0, pos);
+
+         // Tìm trong mảng tooltip
+         for(int i = 0; i < g_tooltipCount; i++)
+           {
+            if(g_tooltipData[i].objectId == baseId)
+              {
+               Comment(g_tooltipData[i].fullTooltip);
+               ChartRedraw();
+               return;
+              }
+           }
+        }
+     }
+// Click vào vùng trống - xóa comment
+   else
+      if(id == CHARTEVENT_CLICK)
+        {
+         Comment("");
+         ChartRedraw();
+        }
   }
 
 // ==================================================
@@ -595,6 +667,13 @@ void DrawSignal(
                                      slPoints, slPrice, tpPoints, tpPrice);
    if(reasons != "")
       tooltipText += "\nCảnh báo:\n" + reasons;
+
+   SignalTooltipData tooltipData;
+   tooltipData.objectId = id;
+   tooltipData.fullTooltip = tooltipText;
+   ++g_tooltipCount;
+   ArrayResize(g_tooltipData, g_tooltipCount);
+   g_tooltipData[g_tooltipCount - 1] = tooltipData;
 
 
 // Label hiển thị STRONG/WEAK
