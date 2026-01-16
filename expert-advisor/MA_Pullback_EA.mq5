@@ -38,11 +38,11 @@ input double   InpRiskRewardRate  = 2.0;            // Tỷ lệ Reward / Risk
 
 // --- INDICATOR SETTINGS ---
 input ENUM_MA_TYPE_MODE InpMAType = MA_TYPE_SMA;    // Loại Moving Average
-input int      InpMA50Period      = 50;             // Chu kỳ MA 50
-input int      InpMA200Period     = 200;            // Chu kỳ MA 200
+input int      InpMA50Period      = 50;             // Chu kỳ MA Fast
+input int      InpMA200Period     = 200;            // Chu kỳ MA Slow
 input int      InpRSIPeriod       = 14;             // Chu kỳ RSI
-input int      InpMACDSlow        = 12;             // Chu kỳ MACD Slow
-input int      InpMACDFast        = 26;             // Chu kỳ MACD Fast
+input int      InpMACDFast        = 12;             // Chu kỳ MACD Fast
+input int      InpMACDSlow        = 26;             // Chu kỳ MACD Slow
 input int      InpMACDSignal      = 9;              // Chu kỳ MACD Signal
 
 // --- STRATEGY SETTINGS ---
@@ -85,37 +85,37 @@ input double   InpPeakMADistanceThreshold = 50.0;   // [Filter] Peak-MA Dist Thr
 input double   InpPeakMADistWeight        = 10.0;   // [Weight] Peak-MA Dist
 
 // --- FILTER 6: ADX TREND STRENGTH ---
-input bool     InpEnableADXFilter       = false;    // [Filter] Bật ADX
+input bool     InpEnableADXFilter       = true;     // [Filter] Bật ADX
 input int      InpADXPeriod             = 14;       // [Filter] Chu kỳ ADX
 input double   InpMinADXThreshold       = 25.0;     // [Filter] Min ADX Threshold
 input bool     InpADXDirectionalConfirm = true;     // [Filter] Check +DI/-DI
 
 // --- FILTER 7: BODY/ATR RATIO ---
-input bool     InpEnableBodyATRFilter = false;      // [Filter] Bật Body/ATR
+input bool     InpEnableBodyATRFilter = true;       // [Filter] Bật Body/ATR
 input double   InpMinBodyATRRatio     = 0.3;        // [Filter] Min Body/ATR Ratio
 
 // --- FILTER 8: VOLUME ---
-input bool     InpEnableVolumeFilter = false;       // [Filter] Bật Volume
+input bool     InpEnableVolumeFilter = true;        // [Filter] Bật Volume
 input int      InpVolumeAvgPeriod    = 20;          // [Filter] Chu kỳ Volume TB
 input double   InpMinVolumeRatio     = 1.0;         // [Filter] Min Volume Ratio
 
 // --- FILTER 9: PRICE-MA DISTANCE ---
-input bool     InpEnablePriceMADistFilter = false;  // [Filter] Bật Price-MA Dist
+input bool     InpEnablePriceMADistFilter = true;   // [Filter] Bật Price-MA Dist
 input double   InpMaxPriceMADistATR       = 2.0;    // [Filter] Max Dist (ATR)
 
 // --- FILTER 10: TIME (EA Only) ---
-input bool     InpEnableTimeFilter = false;         // [Filter] Bật Time Control
+input bool     InpEnableTimeFilter = true;          // [Filter] Bật Time Control
 input int      InpTradeStartHour   = 8;             // [Filter] Start Hour
 input int      InpTradeEndHour     = 20;            // [Filter] End Hour
 
 // --- FILTER 11: NEWS (EA Only) ---
-input bool     InpEnableNewsFilter  = false;        // [Filter] Bật News Filter
+input bool     InpEnableNewsFilter  = true;         // [Filter] Bật News Filter
 input int      InpNewsMinutesBefore = 30;           // [Filter] Mins Before News
 input int      InpNewsMinutesAfter  = 15;           // [Filter] Mins After News
 input int      InpNewsMinImportance = 3;            // [Filter] Min Importance
 
 // --- FILTER 12: CONSECUTIVE LOSSES (EA Only) ---
-input bool     InpEnableConsecLossFilter = false;   // [Filter] Bật Consec Loss
+input bool     InpEnableConsecLossFilter = true;   // [Filter] Bật Consec Loss
 input int      InpMaxConsecutiveLosses   = 3;       // [Filter] Max Consec Losses
 input int      InpPauseMinutesAfterLoss  = 15;      // [Filter] Pause Mins
 
@@ -167,7 +167,7 @@ int OnInit()
       return INIT_FAILED;
      }
 
-   hMACD = iMACD(_Symbol, _Period, InpMACDSlow, InpMACDFast, InpMACDSignal, PRICE_CLOSE);
+   hMACD = iMACD(_Symbol, _Period, InpMACDFast, InpMACDSlow, InpMACDSignal, PRICE_CLOSE);
    if(hMACD == INVALID_HANDLE)
      {
       Print("Lỗi tạo MACD handle");
@@ -198,8 +198,8 @@ int OnInit()
    g_config.ma50SlopeThreshold = InpMA50SlopeThreshold;
    g_config.sma200Period = InpMA200Period;
    g_config.rsiPeriod = InpRSIPeriod;
-   g_config.macdSlow = InpMACDSlow;
    g_config.macdFast = InpMACDFast;
+   g_config.macdSlow = InpMACDSlow;
    g_config.macdSignal = InpMACDSignal;
 
 // 3. Strategy

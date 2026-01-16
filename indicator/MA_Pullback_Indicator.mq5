@@ -27,11 +27,11 @@ input double   InpRiskRewardRate  = 2.0;            // Tỷ lệ Reward / Risk
 
 // --- INDICATOR SETTINGS ---
 input ENUM_MA_TYPE_MODE InpMAType = MA_TYPE_SMA;    // Loại Moving Average
-input int      InpMA50Period      = 50;             // Chu kỳ MA 50
-input int      InpMA200Period     = 200;            // Chu kỳ MA 200
+input int      InpMA50Period      = 50;             // Chu kỳ MA Fast
+input int      InpMA200Period     = 200;            // Chu kỳ MA Slow
 input int      InpRSIPeriod       = 14;             // Chu kỳ RSI
-input int      InpMACDSlow        = 12;             // Chu kỳ MACD Slow
-input int      InpMACDFast        = 26;             // Chu kỳ MACD Fast
+input int      InpMACDFast        = 12;             // Chu kỳ MACD Fast
+input int      InpMACDSlow        = 26;             // Chu kỳ MACD Slow
 input int      InpMACDSignal      = 9;              // Chu kỳ MACD Signal
 
 // --- STRATEGY SETTINGS ---
@@ -74,13 +74,13 @@ input double   InpPeakMADistanceThreshold = 50.0;   // [Filter] Peak-MA Dist Thr
 input double   InpPeakMADistWeight        = 10.0;   // [Weight] Peak-MA Dist
 
 // --- FILTER 6: ADX TREND STRENGTH ---
-input bool     InpEnableADXFilter       = false;    // [Filter] Bật ADX
+input bool     InpEnableADXFilter       = true;    // [Filter] Bật ADX
 input int      InpADXPeriod             = 14;       // [Filter] Chu kỳ ADX
 input double   InpMinADXThreshold       = 25.0;     // [Filter] Min ADX Threshold
 input bool     InpADXDirectionalConfirm = true;     // [Filter] Check +DI/-DI
 
 // --- FILTER 7: BODY/ATR RATIO ---
-input bool     InpEnableBodyATRFilter = false;      // [Filter] Bật Body/ATR
+input bool     InpEnableBodyATRFilter = true;      // [Filter] Bật Body/ATR
 input double   InpMinBodyATRRatio     = 0.3;        // [Filter] Min Body/ATR Ratio
 
 // --- FILTER 8: VOLUME ---
@@ -110,8 +110,8 @@ input color    InpResistColor  = C'139,0,0';        // Màu vùng Resistance (đ
 input color    InpCancelColor  = clrGray;           // Màu tín hiệu bị hủy
 
 // --- ALERTS ---
-input bool     InpAlertEnabled = false;             // Bật/tắt Alert popup
-input bool     InpPushEnabled  = false;             // Bật/tắt Push Notification
+input bool     InpAlertEnabled = true;             // Bật/tắt Alert popup
+input bool     InpPushEnabled  = true;             // Bật/tắt Push Notification
 
 // --- AUTO SETUP ---
 input bool     InpAutoAddIndicators = true;         // Tự động thêm SMA/RSI/MACD lên chart
@@ -160,7 +160,7 @@ int OnInit()
    if(hRSI == INVALID_HANDLE)
       return INIT_FAILED;
 
-   hMACD = iMACD(_Symbol, _Period, InpMACDSlow, InpMACDFast, InpMACDSignal, PRICE_CLOSE);
+   hMACD = iMACD(_Symbol, _Period, InpMACDFast, InpMACDSlow, InpMACDSignal, PRICE_CLOSE);
    if(hMACD == INVALID_HANDLE)
       return INIT_FAILED;
 
@@ -180,8 +180,8 @@ int OnInit()
    g_config.ma50SlopeThreshold = InpMA50SlopeThreshold;
    g_config.sma200Period = InpMA200Period;
    g_config.rsiPeriod = InpRSIPeriod;
-   g_config.macdSlow = InpMACDSlow;
    g_config.macdFast = InpMACDFast;
+   g_config.macdSlow = InpMACDSlow;
    g_config.macdSignal = InpMACDSignal;
 
 // 3. Strategy
