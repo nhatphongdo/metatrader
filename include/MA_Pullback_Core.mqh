@@ -35,6 +35,7 @@ struct SMAPullbackConfig
   {
    // Trade limits
    double            minStopLoss;       // Số points stoploss tối thiểu
+   double            minTakeProfit;     // Số points takeprofit tối thiểu
    double            riskRewardRate;    // Tỷ lệ Reward / Risk
 
    // SMA parameters
