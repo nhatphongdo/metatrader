@@ -15,6 +15,14 @@
 #include "CandlePatterns.mqh"
 
 // ==================================================
+// ================= CONSTANTS ======================
+// ==================================================
+
+// Hệ số R/R tối thiểu cho validation sau khi trừ TP buffer
+// Giá trị 0.9 cho phép TP thấp hơn 10% so với SL do buffer đã trừ
+const double MIN_RISK_REWARD_RATE = 0.9;
+
+// ==================================================
 // =================== STRUCTS ======================
 // ==================================================
 
@@ -37,10 +45,11 @@ struct SMAPullbackConfig
    double            minStopLoss;       // Số points stoploss tối thiểu
    double            minTakeProfit;     // Số points takeprofit tối thiểu
    double            riskRewardRate;    // Tỷ lệ Reward / Risk
+   double            srBufferPercent;   // Buffer (%) cộng thêm vào S/R khi tính SL/TP
 
    // SMA parameters
    int               sma50Period;
-   double            ma50SlopeThreshold; // Góc dốc MA50 tối thiểu (độ)
+   double            ma50SlopeThreshold; // Góc dốc MA Fast (50) tối thiểu (độ)
    int               sma200Period;
 
    // RSI / MACD
@@ -59,12 +68,12 @@ struct SMAPullbackConfig
    double            wickBodyRatio;
 
    // Noise Filter - Lọc vùng giá dao động quanh MA50
-   int               minCutInterval;     // Số nến tối thiểu giữa 2 lần cắt MA50
+   int               minCutInterval;     // Số nến tối thiểu giữa 2 lần cắt MA Fast (50)
    double            cutIntervalWeight;  // Trọng số điểm Cut Interval (default 10)
    int               maxCutsInLookback;  // Số lần cắt tối đa trong lookback (0 = tắt)
    double            maxCutsWeight;      // Trọng số điểm Max Cuts (default 10)
    int               cutsLookbackBars;   // Số nến lookback để đếm lần cắt
-   int               slopeSmoothBars;    // Số nến để tính slope trung bình MA50
+   int               slopeSmoothBars;    // Số nến để tính slope trung bình MA Fast (50)
    double            peakMaDistanceThreshold; // Khoảng cách peak-MA tối thiểu (points) để lọc noise (0 = tắt)
    double            peakMADistWeight;        // Trọng số điểm Peak-MA Distance (default 10)
 
@@ -282,12 +291,18 @@ void ProcessSignal(
 
    if(isBuySignal)
      {
-      sl = MathMin(MathMin(localSupport, sma50[confirmIdx]), sma200[confirmIdx]);
+      // BUY: SL dưới support - trừ thêm buffer % để an toàn hơn
+      double baseSupport = MathMin(MathMin(localSupport, sma50[confirmIdx]), sma200[confirmIdx]);
+      double srBuffer = (entry - baseSupport) * config.srBufferPercent / 100.0;
+      sl = baseSupport - srBuffer;
       risk = entry - sl;
      }
    else
      {
-      sl = MathMax(MathMax(localResistance, sma50[confirmIdx]), sma200[confirmIdx]);
+      // SELL: SL trên resistance - cộng thêm buffer % để an toàn hơn
+      double baseResistance = MathMax(MathMax(localResistance, sma50[confirmIdx]), sma200[confirmIdx]);
+      double srBuffer = (baseResistance - entry) * config.srBufferPercent / 100.0;
+      sl = baseResistance + srBuffer;
       risk = sl - entry;
      }
 
@@ -305,11 +320,14 @@ void ProcessSignal(
 
    if(isBuySignal)
      {
-      tp = MathMin(entry + risk, localResistance);
+      // BUY: TP dưới resistance - trừ buffer % để an toàn hơn
+      double tpBuffer = (localResistance - entry) * config.srBufferPercent / 100.0;
+      double tpResistance = localResistance - tpBuffer;
+      tp = MathMin(entry + risk, tpResistance);
       for(double j = 1.1; j <= config.riskRewardRate; j += 0.1)
         {
          const double _tp = entry + risk * j;
-         if(_tp <= localResistance)
+         if(_tp <= tpResistance)
            {
             tp = _tp;
            }
@@ -317,11 +335,14 @@ void ProcessSignal(
      }
    else
      {
-      tp = MathMax(entry - risk, localSupport);
+      // SELL: TP trên support - cộng buffer % để an toàn hơn
+      double tpBuffer = (entry - localSupport) * config.srBufferPercent / 100.0;
+      double tpSupport = localSupport + tpBuffer;
+      tp = MathMax(entry - risk, tpSupport);
       for(double j = 1.1; j <= config.riskRewardRate; j += 0.1)
         {
          const double _tp = entry - risk * j;
-         if(_tp >= localSupport)
+         if(_tp >= tpSupport)
            {
             tp = _tp;
            }
@@ -338,7 +359,7 @@ void ProcessSignal(
    int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
    PriceValidationResult priceValidation;
    ValidatePriceConstraints(isBuySignal, entry, sl, tp,
-                            config.minStopLoss, config.minTakeProfit, 1.0,
+                            config.minStopLoss, config.minTakeProfit, MIN_RISK_REWARD_RATE,
                             pointValue, digits, priceValidation);
 
    if(!priceValidation.isValid)

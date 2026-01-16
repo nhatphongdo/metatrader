@@ -22,8 +22,9 @@ enum ENUM_MA_TYPE_MODE
 // ==================================================
 
 // --- TRADE LIMITS ---
-input double   InpMinStopLoss     = 30.0;           // Số points StopLoss tối thiểu
-input double   InpRiskRewardRate  = 2.0;            // Tỷ lệ Reward / Risk
+input double   InpMinStopLoss       = 30.0;           // Số points StopLoss tối thiểu
+input double   InpRiskRewardRate    = 2.0;            // Tỷ lệ Reward / Risk
+input double   InpSRBufferPercent   = 5.0;            // S/R/MA Buffer (%) - Buffer cộng thêm vào S/R zone / MA line
 
 // --- INDICATOR SETTINGS ---
 input ENUM_MA_TYPE_MODE InpMAType = MA_TYPE_SMA;    // Loại Moving Average
@@ -174,6 +175,7 @@ int OnInit()
 // 1. Core / Limits
    g_config.minStopLoss = InpMinStopLoss;
    g_config.riskRewardRate = InpRiskRewardRate;
+   g_config.srBufferPercent = InpSRBufferPercent;
 
 // 2. Indicators
    g_config.sma50Period = InpMA50Period;

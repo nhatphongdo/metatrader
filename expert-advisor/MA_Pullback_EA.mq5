@@ -33,8 +33,12 @@ input double   InpMaxSpread       = 10.0;           // Spread tối đa (pips)
 input string   InpTradeComment    = "SMA_Pullback_EA"; // Comment lệnh
 
 // --- TRADE LIMITS ---
-input double   InpMinStopLoss     = 30.0;           // Số points StopLoss tối thiểu
-input double   InpRiskRewardRate  = 2.0;            // Tỷ lệ Reward / Risk
+input double   InpMinStopLoss      = 30.0;           // Số points StopLoss tối thiểu
+input double   InpRiskRewardRate   = 2.0;            // Tỷ lệ Reward / Risk
+input int      InpMaxAccountOrders = 0;              // Max lệnh toàn tài khoản (0 = không giới hạn)
+input int      InpMaxSymbolOrders  = 1;              // Max lệnh cho Symbol hiện tại (0 = không giới hạn)
+input double   InpTPBuffer         = 0;              // TP Buffer (pips, 0 = chỉ dùng spread)
+input double   InpSRBufferPercent  = 5.0;            // S/R/MA Buffer (%) - Buffer cộng thêm vào S/R zone / MA line
 
 // --- INDICATOR SETTINGS ---
 input ENUM_MA_TYPE_MODE InpMAType = MA_TYPE_SMA;    // Loại Moving Average
@@ -192,6 +196,7 @@ int OnInit()
 // 1. Core / Limits
    g_config.minStopLoss = InpMinStopLoss;
    g_config.riskRewardRate = InpRiskRewardRate;
+   g_config.srBufferPercent = InpSRBufferPercent;
 
 // 2. Indicators
    g_config.sma50Period = InpMA50Period;
@@ -351,10 +356,24 @@ void OnTick()
       return;
    g_lastBarTime = currentBarTime;
 
-// Không trade nếu đã có lệnh đang mở
-   if(HasOpenPosition())
+// Kiểm tra giới hạn số lệnh toàn tài khoản
+   if(InpMaxAccountOrders > 0)
      {
-      return;
+      int accountOrders = CountAccountPositions();
+      if(accountOrders >= InpMaxAccountOrders)
+        {
+         return;  // Đã đạt giới hạn lệnh toàn tài khoản
+        }
+     }
+
+// Kiểm tra giới hạn số lệnh cho symbol hiện tại
+   if(InpMaxSymbolOrders > 0)
+     {
+      int symbolOrders = CountSymbolPositions();
+      if(symbolOrders >= InpMaxSymbolOrders)
+        {
+         return;  // Đã đạt giới hạn lệnh cho symbol này
+        }
      }
 
 // Check Consecutive Losses Filter - Tạm dừng trade nếu cần
@@ -580,10 +599,31 @@ void OnTradeTransaction(
 // ==================================================
 
 //+------------------------------------------------------------------+
-//| Check if there's an open position with our magic number         |
+//| Count open positions for this EA (by magic number)              |
 //+------------------------------------------------------------------+
-bool HasOpenPosition()
+int CountAccountPositions()
   {
+   int count = 0;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+     {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket > 0)
+        {
+         if(PositionGetInteger(POSITION_MAGIC) == InpMagicNumber)
+           {
+            count++;
+           }
+        }
+     }
+   return count;
+  }
+
+//+------------------------------------------------------------------+
+//| Count open positions for symbol (by magic number)               |
+//+------------------------------------------------------------------+
+int CountSymbolPositions()
+  {
+   int count = 0;
    for(int i = PositionsTotal() - 1; i >= 0; i--)
      {
       ulong ticket = PositionGetTicket(i);
@@ -592,11 +632,11 @@ bool HasOpenPosition()
          if(PositionGetString(POSITION_SYMBOL) == _Symbol &&
             PositionGetInteger(POSITION_MAGIC) == InpMagicNumber)
            {
-            return true;
+            count++;
            }
         }
      }
-   return false;
+   return count;
   }
 
 //+------------------------------------------------------------------+
@@ -612,6 +652,24 @@ void ExecuteTrade(bool isBuy, const SignalResult &signal)
    double sl = NormalizeDouble(signal.sl, digits);
    double tp = NormalizeDouble(signal.tp, digits);
 
+// Tính buffer để điều chỉnh TP (đối phó nhảy giá/slippage)
+   double spread = ask - bid;
+   double pipMultiplier = (digits == 3 || digits == 5) ? 10.0 : 1.0;  // 5-digit: 1 pip = 10 points
+   double configBuffer = InpTPBuffer * pipMultiplier * g_pointValue;  // Chuyển pips sang giá
+   double tpBuffer = MathMax(configBuffer, spread);   // Buffer = Max(config, spread)
+
+// Điều chỉnh TP: giảm khoảng bằng buffer để tăng khả năng khớp lệnh
+   if(isBuy)
+     {
+      // BUY: TP đóng ở Bid, giảm TP xuống một buffer
+      tp = NormalizeDouble(tp - tpBuffer, digits);
+     }
+   else
+     {
+      // SELL: TP đóng ở Ask, tăng TP lên một buffer (gần giá hơn)
+      tp = NormalizeDouble(tp + tpBuffer, digits);
+     }
+
 // Giá đặt lệnh thực tế
    double entryPrice = isBuy ? ask : bid;
 
@@ -620,7 +678,7 @@ void ExecuteTrade(bool isBuy, const SignalResult &signal)
 // ============================================================
    PriceValidationResult priceValidation;
    ValidatePriceConstraints(isBuy, entryPrice, sl, tp,
-                            InpMinStopLoss, InpMinStopLoss, 1.0,
+                            InpMinStopLoss, InpMinStopLoss, MIN_RISK_REWARD_RATE,
                             g_pointValue, digits, priceValidation);
 
    if(!priceValidation.isValid)
