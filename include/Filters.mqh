@@ -35,14 +35,36 @@ struct UnifiedScoringConfig
    double            maSlopeWeight;           // Trọng số điểm (0-100)
 
    // -----------------------------------------------------------------
-   // FILTER 2: MOMENTUM (RSI + MACD)
-   // Kiểm tra động lượng thị trường
+   // FILTER 2A: STATIC MOMENTUM (RSI + MACD position)
+   // Kiểm tra RSI và MACD có confirm xu hướng không
    // RSI: BUY nếu > 50, SELL nếu < 50
    // MACD: BUY nếu MACD > Signal, SELL nếu MACD < Signal
    // -----------------------------------------------------------------
-   bool              enableMomentumFilter;    // Bật/tắt filter
-   bool              momentumCritical;        // Nếu true, fail = critical fail
-   double            momentumWeight;          // Trọng số mỗi indicator pass
+   bool              enableStaticMomentumFilter;  // Bật/tắt filter
+   bool              staticMomentumCritical;      // Nếu true, fail = critical fail
+   double            staticMomentumWeight;        // Trọng số điểm
+
+   // -----------------------------------------------------------------
+   // FILTER 2B: RSI REVERSAL
+   // Phát hiện RSI đang đi ngược hướng signal (đảo chiều momentum)
+   // SELL bị từ chối nếu RSI đang tăng liên tục
+   // BUY bị từ chối nếu RSI đang giảm liên tục
+   // -----------------------------------------------------------------
+   bool              enableRSIReversalFilter;     // Bật/tắt filter
+   bool              rsiReversalCritical;         // Nếu true, fail = critical fail
+   int               rsiReversalLookback;         // Số nến kiểm tra trend (2-5)
+   double            rsiReversalWeight;           // Trọng số điểm
+
+   // -----------------------------------------------------------------
+   // FILTER 2C: MACD HISTOGRAM TREND
+   // Phát hiện histogram đang mở rộng ngược hướng signal
+   // SELL bị từ chối nếu histogram đang tăng
+   // BUY bị từ chối nếu histogram đang giảm
+   // -----------------------------------------------------------------
+   bool              enableMACDHistogramFilter;   // Bật/tắt filter
+   bool              macdHistogramCritical;       // Nếu true, fail = critical fail
+   int               macdHistogramLookback;       // Số nến kiểm tra trend (1-3)
+   double            macdHistogramWeight;         // Trọng số điểm
 
    // -----------------------------------------------------------------
    // FILTER 3: SMA200 TREND
@@ -262,11 +284,11 @@ ScoringFilterResult CheckMASlopeFilter(
   }
 
 //+------------------------------------------------------------------+
-//| FILTER 2: MOMENTUM (RSI + MACD)                                  |
-//| Kiểm tra RSI và MACD có xác nhận xu hướng không                  |
+//| FILTER 2A: STATIC MOMENTUM                                       |
+//| Kiểm tra RSI và MACD có confirm xu hướng không                   |
 //| Mỗi indicator pass được cộng momentumWeight điểm                 |
 //+------------------------------------------------------------------+
-ScoringFilterResult CheckMomentumFilter(
+ScoringFilterResult CheckStaticMomentumFilter(
    const UnifiedScoringConfig &config,
    bool isBuySignal,
    int confirmIdx,
@@ -281,7 +303,7 @@ ScoringFilterResult CheckMomentumFilter(
    result.reason = "";
    result.value = 0;
 
-   if(!config.enableMomentumFilter)
+   if(!config.enableStaticMomentumFilter)
      {
       result.passed = true;
       return result;
@@ -316,7 +338,7 @@ ScoringFilterResult CheckMomentumFilter(
    if(momentumCount > 0)
      {
       result.passed = true;
-      result.score = momentumCount * config.momentumWeight;
+      result.score = momentumCount * (config.staticMomentumWeight / 2.0);
      }
    else
      {
@@ -326,6 +348,166 @@ ScoringFilterResult CheckMomentumFilter(
 
    return result;
   }
+
+//+------------------------------------------------------------------+
+//| FILTER 2B: RSI REVERSAL                                          |
+//| Phát hiện RSI đang đi ngược hướng signal (đảo chiều momentum)    |
+//| SELL bị từ chối nếu RSI đang tăng liên tục                       |
+//| BUY bị từ chối nếu RSI đang giảm liên tục                        |
+//+------------------------------------------------------------------+
+ScoringFilterResult CheckRSIReversalFilter(
+   const UnifiedScoringConfig &config,
+   bool isBuySignal,
+   int confirmIdx,
+   const double &rsi[],
+   int arraySize
+)
+  {
+   ScoringFilterResult result;
+   result.passed = false;
+   result.score = 0;
+   result.reason = "";
+   result.value = 0;
+
+   if(!config.enableRSIReversalFilter)
+     {
+      result.passed = true;
+      return result;
+     }
+
+// Kiểm tra có đủ nến để tính trend không
+   int lookback = config.rsiReversalLookback;
+   if(lookback < 2)
+      lookback = 2;
+   if(confirmIdx + lookback >= arraySize)
+     {
+      result.passed = true; // Không đủ data, bỏ qua filter
+      return result;
+     }
+
+// Kiểm tra RSI trend trong lookback nến
+// ArraySetAsSeries = true: index nhỏ = mới, index lớn = cũ
+// Nên RSI[confirmIdx] là mới nhất, RSI[confirmIdx+1] là cũ hơn
+   bool rsiIncreasing = true;  // RSI đang tăng
+   bool rsiDecreasing = true;  // RSI đang giảm
+
+   for(int i = 0; i < lookback - 1; i++)
+     {
+      int idx = confirmIdx + i;
+      // So sánh RSI[idx] với RSI[idx+1] (mới vs cũ)
+      if(rsi[idx] <= rsi[idx + 1])
+         rsiIncreasing = false;  // Không tăng liên tục
+      if(rsi[idx] >= rsi[idx + 1])
+         rsiDecreasing = false;  // Không giảm liên tục
+     }
+
+   result.value = rsi[confirmIdx] - rsi[confirmIdx + lookback - 1];
+
+// Logic đảo chiều:
+// - BUY signal + RSI đang giảm = momentum yếu dần, có thể reversal
+// - SELL signal + RSI đang tăng = momentum đang mạnh lên, có thể reversal
+   bool hasReversal = false;
+
+   if(isBuySignal && rsiDecreasing)
+     {
+      hasReversal = true;
+      result.reason = StringFormat("RSI giảm ngược BUY (%.1f → %.1f)",
+                                   rsi[confirmIdx + lookback - 1], rsi[confirmIdx]);
+     }
+   else
+      if(!isBuySignal && rsiIncreasing)
+        {
+         hasReversal = true;
+         result.reason = StringFormat("RSI tăng ngược SELL (%.1f → %.1f)",
+                                      rsi[confirmIdx + lookback - 1], rsi[confirmIdx]);
+        }
+
+   if(!hasReversal)
+     {
+      result.passed = true;
+      result.score = config.rsiReversalWeight;
+     }
+// Nếu hasReversal = true, passed = false (mặc định)
+
+   return result;
+  }
+
+//+------------------------------------------------------------------+
+//| FILTER 2C: MACD HISTOGRAM TREND                                  |
+//| Phát hiện histogram đang mở rộng ngược hướng signal              |
+//| SELL bị từ chối nếu histogram đang tăng (bullish momentum)       |
+//| BUY bị từ chối nếu histogram đang giảm (bearish momentum)        |
+//+------------------------------------------------------------------+
+ScoringFilterResult CheckMACDHistogramFilter(
+   const UnifiedScoringConfig &config,
+   bool isBuySignal,
+   int confirmIdx,
+   const double &macdMain[],
+   const double &macdSignal[],
+   int arraySize
+)
+  {
+   ScoringFilterResult result;
+   result.passed = false;
+   result.score = 0;
+   result.reason = "";
+   result.value = 0;
+
+   if(!config.enableMACDHistogramFilter)
+     {
+      result.passed = true;
+      return result;
+     }
+
+// Kiểm tra có đủ nến để tính trend không
+   int lookback = config.macdHistogramLookback;
+   if(lookback < 1)
+      lookback = 1;
+   if(confirmIdx + lookback >= arraySize)
+     {
+      result.passed = true; // Không đủ data, bỏ qua filter
+      return result;
+     }
+
+// Tính histogram = MACD - Signal
+   double histCurrent = macdMain[confirmIdx] - macdSignal[confirmIdx];
+   double histPrev = macdMain[confirmIdx + lookback] - macdSignal[confirmIdx + lookback];
+
+   result.value = histCurrent - histPrev;
+
+// Kiểm tra histogram trend
+   bool histIncreasing = (histCurrent > histPrev);  // Histogram đang tăng
+   bool histDecreasing = (histCurrent < histPrev);  // Histogram đang giảm
+
+// Logic đảo chiều:
+// - BUY signal + histogram đang giảm = bearish momentum đang mạnh lên
+// - SELL signal + histogram đang tăng = bullish momentum đang mạnh lên
+   bool hasReversal = false;
+
+   if(isBuySignal && histDecreasing)
+     {
+      hasReversal = true;
+      result.reason = StringFormat("MACD Hist giảm ngược BUY (%.5f → %.5f)",
+                                   histPrev, histCurrent);
+     }
+   else
+      if(!isBuySignal && histIncreasing)
+        {
+         hasReversal = true;
+         result.reason = StringFormat("MACD Hist tăng ngược SELL (%.5f → %.5f)",
+                                      histPrev, histCurrent);
+        }
+
+   if(!hasReversal)
+     {
+      result.passed = true;
+      result.score = config.macdHistogramWeight;
+     }
+// Nếu hasReversal = true, passed = false (mặc định)
+
+   return result;
+  }
+
 
 //+------------------------------------------------------------------+
 //| FILTER 3: SMA200 TREND                                           |
@@ -926,14 +1108,38 @@ void RunUnifiedScoringFilters(
      }
 
 // -----------------------------------------------------------------
-// FILTER 2: MOMENTUM (RSI + MACD)
+// FILTER 2A: STATIC MOMENTUM (RSI + MACD position)
 // -----------------------------------------------------------------
-   filterResult = CheckMomentumFilter(config, isBuySignal, confirmIdx, rsi, macdMain, macdSignal);
+   filterResult = CheckStaticMomentumFilter(config, isBuySignal, confirmIdx, rsi, macdMain, macdSignal);
    outResult.totalScore += filterResult.score;
    if(!filterResult.passed && filterResult.reason != "")
      {
       outResult.allReasons += "- " + filterResult.reason + "\n";
-      if(config.momentumCritical)
+      if(config.staticMomentumCritical)
+         outResult.hasCriticalFail = true;
+     }
+
+// -----------------------------------------------------------------
+// FILTER 2B: RSI REVERSAL
+// -----------------------------------------------------------------
+   filterResult = CheckRSIReversalFilter(config, isBuySignal, confirmIdx, rsi, arraySize);
+   outResult.totalScore += filterResult.score;
+   if(!filterResult.passed && filterResult.reason != "")
+     {
+      outResult.allReasons += "- " + filterResult.reason + "\n";
+      if(config.rsiReversalCritical)
+         outResult.hasCriticalFail = true;
+     }
+
+// -----------------------------------------------------------------
+// FILTER 2C: MACD HISTOGRAM TREND
+// -----------------------------------------------------------------
+   filterResult = CheckMACDHistogramFilter(config, isBuySignal, confirmIdx, macdMain, macdSignal, arraySize);
+   outResult.totalScore += filterResult.score;
+   if(!filterResult.passed && filterResult.reason != "")
+     {
+      outResult.allReasons += "- " + filterResult.reason + "\n";
+      if(config.macdHistogramCritical)
          outResult.hasCriticalFail = true;
      }
 

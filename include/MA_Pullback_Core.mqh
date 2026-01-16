@@ -41,109 +41,174 @@ struct SignalResult
 
 struct SMAPullbackConfig
   {
-   // Trade limits
-   double            minStopLoss;       // Số points stoploss tối thiểu
-   double            minTakeProfit;     // Số points takeprofit tối thiểu
-   double            riskRewardRate;    // Tỷ lệ Reward / Risk
-   double            srBufferPercent;   // Buffer (%) cộng thêm vào S/R khi tính SL/TP
+   // ==============================================================
+   // TRADE LIMITS & CORE SETTINGS
+   // ==============================================================
+   double            minStopLoss;             // Số points stoploss tối thiểu
+   double            minTakeProfit;           // Số points takeprofit tối thiểu
+   double            riskRewardRate;          // Tỷ lệ Reward / Risk
+   double            srBufferPercent;         // Buffer (%) cộng thêm vào S/R khi tính SL/TP
+   double            minScoreToPass;          // Điểm tối thiểu để signal được chấp nhận
 
-   // SMA parameters
-   int               sma50Period;
-   double            ma50SlopeThreshold; // Góc dốc MA Fast (50) tối thiểu (độ)
-   int               sma200Period;
+   // ==============================================================
+   // INDICATOR PARAMETERS
+   // ==============================================================
+   int               sma50Period;             // Chu kỳ MA Fast
+   int               sma200Period;            // Chu kỳ MA Slow
+   double            ma50SlopeThreshold;      // Góc dốc MA Fast tối thiểu (độ)
+   int               slopeSmoothBars;         // Số nến để tính slope trung bình
+   int               rsiPeriod;               // Chu kỳ RSI
+   int               macdFast;                // MACD Fast period
+   int               macdSlow;                // MACD Slow period
+   int               macdSignal;              // MACD Signal period
+   int               adxPeriod;               // Chu kỳ ADX
 
-   // RSI / MACD
-   int               rsiPeriod;
-   int               macdSlow;
-   int               macdFast;
-   int               macdSignal;
+   // ==============================================================
+   // STRATEGY PARAMETERS
+   // ==============================================================
+   int               maxWaitBars;             // Số nến tối đa chờ pullback
+   int               atrLength;               // Số nến tính ATR
+   double            wickBodyRatio;           // Tỷ lệ Bóng/Thân nến
 
-   // Support/Resistance
-   int               srLookback;
-   double            srZonePercent;     // % vùng giá cho phép
+   // ==============================================================
+   // FILTER 1: MA SLOPE
+   // Kiểm tra độ dốc MA có đủ mạnh không
+   // ==============================================================
+   bool              enableMASlopeFilter;      // Bật/tắt MA Slope filter
+   bool              maSlopeCritical;          // Nếu true, fail = critical fail
+   double            maSlopeWeight;            // Trọng số của MA Slope filter
 
-   // S/R Min Width Filter
-   bool              enableSRMinWidthFilter;  // Bật/tắt filter độ rộng S/R tối thiểu
-   bool              srMinWidthCritical;      // Nếu true, fail = critical fail
-   double            minSRWidthATR;           // Độ rộng tối thiểu (bội số ATR)
-   double            srMinWidthWeight;        // Trọng số điểm
+   // ==============================================================
+   // FILTER 2A: STATIC MOMENTUM (RSI + MACD position)
+   // Kiểm tra RSI và MACD có xác nhận xu hướng không
+   // ==============================================================
+   bool              enableStaticMomentumFilter;      // Bật/tắt Momentum filter
+   bool              staticMomentumCritical;          // Nếu true, fail = critical fail
+   double            staticMomentumWeight;            // Trọng số của Momentum filter
 
-   // Pullback
-   int               maxWaitBars;
-   int               atrLength;
-   double            wickBodyRatio;
+   // ==============================================================
+   // FILTER 2B: RSI REVERSAL DETECTION
+   // Phát hiện RSI đang đi ngược hướng signal (đảo chiều sớm)
+   // ==============================================================
+   bool              enableRSIReversalFilter;         // Bật/tắt RSI Reversal filter
+   bool              rsiReversalCritical;             // Nếu true, fail = critical fail
+   int               rsiReversalLookback;             // Số nến để kiểm tra RSI reversal
+   double            rsiReversalWeight;               // Trọng số của RSI Reversal filter
 
-   // Noise Filter - Lọc vùng giá dao động quanh MA50
-   int               minCutInterval;     // Số nến tối thiểu giữa 2 lần cắt MA Fast (50)
-   double            cutIntervalWeight;  // Trọng số điểm Cut Interval (default 10)
-   int               maxCutsInLookback;  // Số lần cắt tối đa trong lookback (0 = tắt)
-   double            maxCutsWeight;      // Trọng số điểm Max Cuts (default 10)
-   int               cutsLookbackBars;   // Số nến lookback để đếm lần cắt
-   int               slopeSmoothBars;    // Số nến để tính slope trung bình MA Fast (50)
-   double            peakMaDistanceThreshold; // Khoảng cách peak-MA tối thiểu (points) để lọc noise (0 = tắt)
-   double            peakMADistWeight;        // Trọng số điểm Peak-MA Distance (default 10)
+   // ==============================================================
+   // FILTER 2C: MACD HISTOGRAM TREND
+   // Phát hiện histogram đang mở rộng ngược hướng signal
+   // ==============================================================
+   bool              enableMACDHistogramFilter;       // Bật/tắt MACD Histogram filter
+   bool              macdHistogramCritical;           // Nếu true, fail = critical fail
+   int               macdHistogramLookback;           // Số nến để kiểm tra MACD histogram
+   double            macdHistogramWeight;             // Trọng số của MACD Histogram filter
 
-   // Filter: ADX Trend Strength
+   // ==============================================================
+   // FILTER 3: SMA200 TREND
+   // Kiểm tra giá có cùng xu hướng với SMA200 không
+   // ==============================================================
+   bool              enableSMA200Filter;              // Bật/tắt SMA200 filter
+   bool              sma200Critical;                  // Nếu true, fail = critical fail
+   double            sma200Weight;                    // Trọng số của SMA Slow filter
+
+   // ==============================================================
+   // FILTER 4: S/R ZONE
+   // Kiểm tra giá có trong vùng entry tốt không (% từ S đến R)
+   // ==============================================================
+   bool              enableSRZoneFilter;           // Bật/tắt S/R Zone filter
+   bool              srZoneCritical;               // Nếu true, fail = critical fail
+   int               srLookback;                   // Số nến để kiểm tra S/R Zone
+   double            srZonePercent;                // % vùng giá cho phép
+   double            srZoneWeight;                 // Trọng số của S/R Zone filter
+
+   // ==============================================================
+   // FILTER 4B: S/R MIN WIDTH
+   // Lọc vùng S/R quá hẹp (không đủ room cho SL/TP)
+   // ==============================================================
+   bool              enableSRMinWidthFilter;       // Bật/tắt filter độ rộng S/R tối thiểu
+   bool              srMinWidthCritical;           // Nếu true, fail = critical fail
+   double            minSRWidthATR;                // Độ rộng tối thiểu (bội số ATR)
+   double            srMinWidthWeight;             // Trọng số của S/R Min Width filter
+
+   // ==============================================================
+   // FILTER 5: MA NOISE (Cut Interval, Max Cuts, Peak Distance)
+   // Lọc vùng giá dao động quanh MA50 (choppy market)
+   // ==============================================================
+   int               minCutInterval;          // Số nến tối thiểu giữa 2 lần cắt (0=Off)
+   double            cutIntervalWeight;       // Trọng số của Cut Interval filter
+   int               maxCutsInLookback;       // Số lần cắt tối đa trong lookback (0=Off)
+   int               cutsLookbackBars;        // Số nến để kiểm tra Max Cuts
+   double            maxCutsWeight;           // Trọng số của Max Cuts filter
+   double            peakMaDistanceThreshold; // Khoảng cách peak-MA tối thiểu (0=Off)
+   double            peakMADistWeight;        // Trọng số của Peak-MA Distance filter
+
+   // ==============================================================
+   // FILTER 6: ADX TREND STRENGTH
+   // Kiểm tra thị trường có đang trending không
+   // ==============================================================
    bool              enableADXFilter;           // Bật/tắt ADX filter
    bool              adxCritical;               // Nếu true, fail = critical fail
-   int               adxPeriod;                 // Chu kỳ ADX (thường = 14)
    double            minADXThreshold;           // Ngưỡng ADX tối thiểu (20-25 để xác định trending)
-   bool              useADXDirectionalConfirm;  // true = kiểm tra +DI/-DI theo hướng signal
+   bool              useADXDirectionalConfirm;  // Nếu true, ADX phải cùng hướng với signal
+   double            adxWeight;                 // Trọng số của ADX filter
 
-   // Filter: Body/ATR Ratio
+   // ==============================================================
+   // FILTER 7: BODY/ATR RATIO
+   // Kiểm tra nến confirm có đủ mạnh không
+   // ==============================================================
    bool              enableBodyATRFilter;       // Bật/tắt Body/ATR filter
    bool              bodyATRCritical;           // Nếu true, fail = critical fail
-   double            minBodyATRRatio;           // Tỷ lệ body/ATR tối thiểu (0.3 = 30% ATR)
+   double            minBodyATRRatio;           // Tỷ lệ body/ATR tối thiểu (0.2-0.5 = 20-50% ATR)
+   double            bodyATRWeight;             // Trọng số của Body/ATR filter
 
-   // Filter: Volume Confirmation
+   // ==============================================================
+   // FILTER 8: VOLUME CONFIRMATION
+   // Kiểm tra volume có đủ so với trung bình không
+   // ==============================================================
    bool              enableVolumeFilter;        // Bật/tắt Volume filter
    bool              volumeCritical;            // Nếu true, fail = critical fail
-   int               volumeAvgPeriod;           // Chu kỳ tính volume trung bình
-   double            minVolumeRatio;            // Tỷ lệ volume/avg volume tối thiểu (1.0 = 100%)
+   int               volumeAvgPeriod;           // Số nến để tính volume trung bình
+   double            minVolumeRatio;            // Tỷ lệ volume tối thiểu so với trung bình (1.5 = 150%)
+   double            volumeWeight;              // Trọng số của Volume filter
 
-   // Filter: Price-MA Distance (tránh chase)
-   bool              enablePriceMADistanceFilter; // Bật/tắt filter
-   bool              priceMADistCritical;         // Nếu true, fail = critical fail
-   double            maxPriceMADistanceATR;       // Khoảng cách tối đa (bội số ATR, ví dụ 2.0 = 2*ATR)
+   // ==============================================================
+   // FILTER 9: PRICE-MA DISTANCE
+   // Tránh chase - giá không quá xa MA50
+   // ==============================================================
+   bool              enablePriceMADistanceFilter;   // Bật/tắt Price-MA Distance filter
+   bool              priceMADistCritical;           // Nếu true, fail = critical fail
+   double            maxPriceMADistanceATR;         // Khoảng cách giá-MA tối đa (bội số ATR, ví dụ 2.0 = 2*ATR)
+   double            priceMADistWeight;             // Trọng số của Price-MA Distance filter
 
-   // Filter: Time/News Filter
-   bool              enableTimeFilter;          // Bật/tắt Time filter
-   bool              timeCritical;              // Nếu true, fail = critical fail
-   int               tradeStartHour;            // Giờ bắt đầu được phép trade (0-23, server time)
-   int               tradeEndHour;              // Giờ kết thúc được phép trade (0-23, server time)
-   bool              enableNewsFilter;          // Bật/tắt News filter (MQL5 Calendar)
-   bool              newsCritical;              // Nếu true, fail = critical fail
-   int               newsMinutesBefore;         // Số phút trước tin quan trọng cần tránh
-   int               newsMinutesAfter;          // Số phút sau tin quan trọng cần tránh
-   int               newsMinImportance;         // Mức độ quan trọng tối thiểu (1=Low, 2=Medium, 3=High)
+   // ==============================================================
+   // FILTER 10: TIME CONTROL (EA only)
+   // Chỉ trade trong giờ tốt
+   // ==============================================================
+   bool              enableTimeFilter;              // Bật/tắt Time filter
+   bool              timeCritical;                  // Nếu true, fail = critical fail
+   int               tradeStartHour;                // Giờ bắt đầu trade (0-23, server time)
+   int               tradeEndHour;                  // Giờ kết thúc trade (0-23, server time)
+   double            timeWeight;                    // Trọng số của Time filter
 
-   // Filter: Consecutive Losses (chỉ dùng trong EA, không dùng trong Indicator)
-   bool              enableConsecutiveLossFilter; // Bật/tắt filter
-   int               maxConsecutiveLosses;        // Số lệnh thua liên tiếp trước khi tạm dừng
-   int               pauseMinutesAfterLosses;     // Số phút tạm dừng sau chuỗi thua
+   // ==============================================================
+   // FILTER 11: NEWS FILTER (EA only)
+   // Tránh trade gần tin quan trọng
+   // ==============================================================
+   bool              enableNewsFilter;              // Bật/tắt News filter
+   bool              newsCritical;                  // Nếu true, fail = critical fail
+   int               newsMinutesBefore;             // Số phút trước tin để dừng trade
+   int               newsMinutesAfter;              // Số phút sau tin để dừng trade
+   int               newsMinImportance;             // Mức độ quan trọng tối thiểu của tin (1=Low, 2=Medium, 3=High)
+   double            newsWeight;                    // Trọng số của News filter
 
-   // Signal Scoring Filters (configurable weights)
-   bool              enableMASlopeFilter;         // Bật/tắt MA Slope filter
-   bool              maSlopeCritical;             // Nếu true, fail = critical fail
-   double            maSlopeWeight;               // Trọng số MA Slope (default 10)
-   bool              enableMomentumFilter;        // Bật/tắt Momentum filter
-   bool              momentumCritical;            // Nếu true, fail = critical fail
-   double            momentumWeight;              // Trọng số mỗi momentum indicator (default 30)
-   bool              enableSMA200Filter;          // Bật/tắt SMA200 filter
-   bool              sma200Critical;              // Nếu true, fail = critical fail
-   double            sma200Weight;                // Trọng số SMA200 (default 10)
-   bool              enableSRZoneFilter;          // Bật/tắt S/R Zone filter
-   bool              srZoneCritical;              // Nếu true, fail = critical fail
-   double            srZoneWeight;                // Trọng số S/R Zone (default 20)
-   double            adxWeight;                   // Trọng số ADX (default 10)
-   double            bodyATRWeight;               // Trọng số Body/ATR (default 5)
-   double            volumeWeight;                // Trọng số Volume (default 5)
-   double            priceMADistWeight;           // Trọng số Price-MA Distance (default 5)
-   double            timeWeight;                  // Trọng số Time (default 0 - không ảnh hưởng score)
-   double            newsWeight;                  // Trọng số News (default 0 - không ảnh hưởng score)
-
-   // Min score to pass
-   double            minScoreToPass;              // Điểm tối thiểu để signal được chấp nhận (default 50)
+   // ==============================================================
+   // FILTER 12: CONSECUTIVE LOSSES (EA only)
+   // Tạm dừng sau chuỗi thua liên tiếp
+   // ==============================================================
+   bool              enableConsecutiveLossFilter; // Bật/tắt Consecutive Loss filter
+   int               maxConsecutiveLosses;        // Số lần thua liên tiếp tối đa để kích hoạt pause
+   int               pauseMinutesAfterLosses;     // Số phút pause sau chuỗi thua
   };
 
 
@@ -210,7 +275,7 @@ void ProcessSignal(
    if(maResult.allReasons != "")
       outResult.reasons += maResult.allReasons;
 
-// 2. Run Unified Filters (Slope, Momentum, S/R, Ext Filters)
+// 2. Run Unified Filters
    UnifiedScoringConfig uniConfig;
 
    uniConfig.enableMASlopeFilter = config.enableMASlopeFilter;
@@ -219,9 +284,22 @@ void ProcessSignal(
    uniConfig.slopeSmoothBars = config.slopeSmoothBars;
    uniConfig.maSlopeWeight = config.maSlopeWeight;
 
-   uniConfig.enableMomentumFilter = config.enableMomentumFilter;
-   uniConfig.momentumCritical = config.momentumCritical;
-   uniConfig.momentumWeight = config.momentumWeight;
+// Filter 2A: Static Momentum
+   uniConfig.enableStaticMomentumFilter = config.enableStaticMomentumFilter;
+   uniConfig.staticMomentumCritical = config.staticMomentumCritical;
+   uniConfig.staticMomentumWeight = config.staticMomentumWeight;
+
+// Filter 2B: RSI Reversal
+   uniConfig.enableRSIReversalFilter = config.enableRSIReversalFilter;
+   uniConfig.rsiReversalCritical = config.rsiReversalCritical;
+   uniConfig.rsiReversalLookback = config.rsiReversalLookback;
+   uniConfig.rsiReversalWeight = config.rsiReversalWeight;
+
+// Filter 2C: MACD Histogram
+   uniConfig.enableMACDHistogramFilter = config.enableMACDHistogramFilter;
+   uniConfig.macdHistogramCritical = config.macdHistogramCritical;
+   uniConfig.macdHistogramLookback = config.macdHistogramLookback;
+   uniConfig.macdHistogramWeight = config.macdHistogramWeight;
 
    uniConfig.enableSMA200Filter = config.enableSMA200Filter;
    uniConfig.sma200Critical = config.sma200Critical;
