@@ -31,7 +31,6 @@ input double   InpMaxLoss         = 100.0;          // Số tiền thua tối đ
 input int      InpMagicNumber     = 123456;         // Magic Number
 input double   InpMaxSpread       = 10.0;           // Spread tối đa (pips)
 input string   InpTradeComment    = "SMA_Pullback_EA"; // Comment lệnh
-input int      InpMinScoreToTrade = 50;             // Điểm (%) tối thiểu để vào lệnh
 
 // --- TRADE LIMITS ---
 input double   InpMinStopLoss     = 30.0;           // Số points StopLoss tối thiểu
@@ -481,8 +480,8 @@ void OnTick()
 
       if(scanResult.found)
         {
-         // Chỉ trade nếu signal xác nhận tại nến vừa đóng (index = 1) và signal phù hợp
-         if(scanResult.confirmIdx == 1 && scanResult.signal.score >= MathMax(1, InpMinScoreToTrade))
+         // Chỉ trade nếu signal xác nhận tại nến vừa đóng (index = 1)
+         if(scanResult.confirmIdx == 1)
            {
             Print("Có tín hiệu tại ", TimeToString(time[scanResult.confirmIdx]),
                   " Type: ", scanResult.isBuy ? "BUY" : "SELL",
@@ -619,65 +618,19 @@ void ExecuteTrade(bool isBuy, const SignalResult &signal)
 // ============================================================
 // VALIDATION: Kiểm tra các ràng buộc giá với ask/bid thực tế
 // ============================================================
+   PriceValidationResult priceValidation;
+   ValidatePriceConstraints(isBuy, entryPrice, sl, tp,
+                            InpMinStopLoss, InpMinStopLoss, 1.0,
+                            g_pointValue, digits, priceValidation);
 
-// Tính khoảng cách SL bằng points (dùng giá ask/bid thực tế)
-   double slDistancePoints = MathAbs(entryPrice - sl) / g_pointValue;
-
-// Kiểm tra SL phải đúng hướng
-   if(isBuy)
+   if(!priceValidation.isValid)
      {
-      if(sl >= entryPrice)
-        {
-         Print("Từ chối: SL (", DoubleToString(sl, digits), ") phải < giá BUY (", DoubleToString(entryPrice, digits), ")");
-         return;
-        }
-     }
-   else
-     {
-      if(sl <= entryPrice)
-        {
-         Print("Từ chối: SL (", DoubleToString(sl, digits), ") phải > giá SELL (", DoubleToString(entryPrice, digits), ")");
-         return;
-        }
-     }
-
-// Kiểm tra SL tối thiểu
-   if(slDistancePoints < InpMinStopLoss)
-     {
-      Print("Từ chối: Khoảng cách SL (", DoubleToString(slDistancePoints, 1), " points) < MinStopLoss (", DoubleToString(InpMinStopLoss, 1), " points)",
-            " | Entry: ", DoubleToString(entryPrice, digits), ", SL: ", DoubleToString(sl, digits));
+      Print(priceValidation.reason);
       return;
      }
 
-// Kiểm tra TP phải đúng hướng
-   if(isBuy)
-     {
-      if(tp <= entryPrice)
-        {
-         Print("Từ chối: TP (", DoubleToString(tp, digits), ") phải > giá BUY (", DoubleToString(entryPrice, digits), ")");
-         return;
-        }
-     }
-   else
-     {
-      if(tp >= entryPrice)
-        {
-         Print("Từ chối: TP (", DoubleToString(tp, digits), ") phải < giá SELL (", DoubleToString(entryPrice, digits), ")");
-         return;
-        }
-     }
-
-// Tính khoảng cách TP bằng points
-   double tpDistancePoints = MathAbs(tp - entryPrice) / g_pointValue;
-
-// Kiểm tra TP tối thiểu (tối thiểu = MinStopLoss)
-   double minTakeProfit = InpMinStopLoss;  // TP tối thiểu = SL tối thiểu
-   if(tpDistancePoints < minTakeProfit)
-     {
-      Print("Từ chối: Khoảng TP (", DoubleToString(tpDistancePoints, 1), " points) < MinTP (", DoubleToString(minTakeProfit, 1), " points)",
-            " | Entry: ", DoubleToString(entryPrice, digits), ", TP: ", DoubleToString(tp, digits));
-      return;
-     }
+   double slDistancePoints = priceValidation.slDistancePoints;
+   double tpDistancePoints = priceValidation.tpDistancePoints;
 
 // ============================================================
 // Tính lot size dựa trên InpMaxLoss

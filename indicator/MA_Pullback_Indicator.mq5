@@ -35,8 +35,8 @@ input int      InpMACDFast        = 26;             // Chu kỳ MACD Fast
 input int      InpMACDSignal      = 9;              // Chu kỳ MACD Signal
 
 // --- STRATEGY SETTINGS ---
-input int      InpMaxWaitBars     = 10;             // Số nến tối đa chờ pullback
-input int      InpATRLength       = 10;             // Số nến tính ATR
+input int      InpMaxWaitBars     = 20;             // Số nến tối đa chờ pullback
+input int      InpATRLength       = 20;             // Số nến tính ATR
 input double   InpWickBodyRatio   = 2.0;            // Tỷ lệ Bóng/Thân nến
 
 // ==================================================
@@ -271,35 +271,48 @@ void OnDeinit(const int reason)
 void AddIndicatorsToChart()
   {
    long chartId = ChartID();
+   string indName = "";
 
-// Thêm SMA 50 (dùng lại handle đã có)
+// Thêm SMA 50
    if(hSMA50 != INVALID_HANDLE)
      {
-      if(!ChartIndicatorAdd(chartId, 0, hSMA50))
-         Print("Lỗi thêm SMA50");
+      if(IndicatorExists(chartId, "MA(" + IntegerToString(InpMA50Period) + ")", indName) == -1)
+        {
+         if(!ChartIndicatorAdd(chartId, 0, hSMA50))
+            Print("Lỗi thêm SMA50");
+        }
      }
 
-// Thêm SMA 200 (dùng lại handle đã có)
+// Thêm SMA 200
    if(hSMA200 != INVALID_HANDLE)
      {
-      if(!ChartIndicatorAdd(chartId, 0, hSMA200))
-         Print("Lỗi thêm SMA200");
+      if(IndicatorExists(chartId, "MA(" + IntegerToString(InpMA200Period) + ")", indName) == -1)
+        {
+         if(!ChartIndicatorAdd(chartId, 0, hSMA200))
+            Print("Lỗi thêm SMA200");
+        }
      }
 
-// Thêm RSI (subwindow mới, dùng lại handle đã có)
+// Thêm RSI (subwindow mới)
    if(hRSI != INVALID_HANDLE)
      {
-      int rsiWindow = (int)ChartGetInteger(chartId, CHART_WINDOWS_TOTAL);
-      if(!ChartIndicatorAdd(chartId, rsiWindow, hRSI))
-         Print("Lỗi thêm RSI");
+      if(IndicatorExists(chartId, "RSI(" + IntegerToString(InpRSIPeriod) + ")", indName) == -1)
+        {
+         int rsiWindow = (int)ChartGetInteger(chartId, CHART_WINDOWS_TOTAL);
+         if(!ChartIndicatorAdd(chartId, rsiWindow, hRSI))
+            Print("Lỗi thêm RSI");
+        }
      }
 
-// Thêm MACD (subwindow mới, dùng lại handle đã có)
+// Thêm MACD (subwindow mới)
    if(hMACD != INVALID_HANDLE)
      {
-      int macdWindow = (int)ChartGetInteger(chartId, CHART_WINDOWS_TOTAL);
-      if(!ChartIndicatorAdd(chartId, macdWindow, hMACD))
-         Print("Lỗi thêm MACD");
+      if(IndicatorExists(chartId, "MACD", indName) == -1)
+        {
+         int macdWindow = (int)ChartGetInteger(chartId, CHART_WINDOWS_TOTAL);
+         if(!ChartIndicatorAdd(chartId, macdWindow, hMACD))
+            Print("Lỗi thêm MACD");
+        }
      }
   }
 
@@ -309,55 +322,35 @@ void RemoveIndicatorsFromChart()
    long chartId = ChartID();
 
 // Xóa SMA 50 (chỉ xóa khỏi chart, không release handle vì OnDeinit sẽ làm)
-   for(int i = ChartIndicatorsTotal(chartId, 0) - 1; i >= 0; i--)
+   string indName = "";
+   int window = IndicatorExists(chartId, "MA(" + IntegerToString(InpMA50Period) + ")", indName);
+   if(window >= 0 && indName != "")
      {
-      string indName = ChartIndicatorName(chartId, 0, i);
-      if(StringFind(indName, "MA(" + IntegerToString(InpMA50Period) + ")") >= 0)
-        {
-         ChartIndicatorDelete(chartId, 0, indName);
-         break;
-        }
+      ChartIndicatorDelete(chartId, window, indName);
      }
 
 // Xóa SMA 200
-   for(int i = ChartIndicatorsTotal(chartId, 0) - 1; i >= 0; i--)
+   indName = "";
+   window = IndicatorExists(chartId, "MA(" + IntegerToString(InpMA200Period) + ")", indName);
+   if(window >= 0 && indName != "")
      {
-      string indName = ChartIndicatorName(chartId, 0, i);
-      if(StringFind(indName, "MA(" + IntegerToString(InpMA200Period) + ")") >= 0)
-        {
-         ChartIndicatorDelete(chartId, 0, indName);
-         break;
-        }
+      ChartIndicatorDelete(chartId, window, indName);
      }
 
 // Xóa RSI (tìm trong các subwindow)
-   int totalWindows = (int)ChartGetInteger(chartId, CHART_WINDOWS_TOTAL);
-   for(int w = totalWindows - 1; w >= 1; w--)
+   indName = "";
+   window = IndicatorExists(chartId, "RSI(" + IntegerToString(InpRSIPeriod) + ")", indName);
+   if(window >= 0 && indName != "")
      {
-      for(int i = ChartIndicatorsTotal(chartId, w) - 1; i >= 0; i--)
-        {
-         string indName = ChartIndicatorName(chartId, w, i);
-         if(StringFind(indName, "RSI(" + IntegerToString(InpRSIPeriod) + ")") >= 0)
-           {
-            ChartIndicatorDelete(chartId, w, indName);
-            break;
-           }
-        }
+      ChartIndicatorDelete(chartId, window, indName);
      }
 
 // Xóa MACD (tìm trong các subwindow)
-   totalWindows = (int)ChartGetInteger(chartId, CHART_WINDOWS_TOTAL);
-   for(int w = totalWindows - 1; w >= 1; w--)
+   indName = "";
+   window = IndicatorExists(chartId, "MACD", indName);
+   if(window >= 0 && indName != "")
      {
-      for(int i = ChartIndicatorsTotal(chartId, w) - 1; i >= 0; i--)
-        {
-         string indName = ChartIndicatorName(chartId, w, i);
-         if(StringFind(indName, "MACD") >= 0)
-           {
-            ChartIndicatorDelete(chartId, w, indName);
-            break;
-           }
-        }
+      ChartIndicatorDelete(chartId, window, indName);
      }
   }
 

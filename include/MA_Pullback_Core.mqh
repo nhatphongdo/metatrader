@@ -333,11 +333,16 @@ void ProcessSignal(
    outResult.resistance = localResistance;
    outResult.support = localSupport;
 
-// Kiểm tra StopLoss tối thiểu
-   int slPoints = (int)(MathAbs(entry - sl) / pointValue);
-   if(slPoints < config.minStopLoss)
+// Validate Entry/SL/TP bằng hàm chung
+   int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+   PriceValidationResult priceValidation;
+   ValidatePriceConstraints(isBuySignal, entry, sl, tp,
+                            config.minStopLoss, config.minTakeProfit, 1.0,
+                            pointValue, digits, priceValidation);
+
+   if(!priceValidation.isValid)
      {
-      outResult.reasons += StringFormat("- SL quá chật: %d pts\n", slPoints);
+      outResult.reasons += StringFormat("- %s\n", priceValidation.reason);
       outResult.isCriticalFail = true;
       return;
      }
