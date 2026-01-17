@@ -28,12 +28,13 @@ input bool     InpEnableDrawSignal  = DEF_ENABLE_DRAW_SIGNAL;    // Bật vẽ s
 input bool     InpKeepMarkersOnStop = DEF_KEEP_MARKERS_ON_STOP;  // Giữ marker khi EA dừng
 
 // --- TRADE LIMITS ---
-input double   InpMinStopLoss      = DEF_MIN_STOP_LOSS;       // Số points StopLoss tối thiểu
-input double   InpRiskRewardRate   = DEF_RISK_REWARD_RATE;    // Tỷ lệ Reward / Risk
-input int      InpMaxAccountOrders = DEF_MAX_ACCOUNT_ORDERS;  // Max lệnh toàn tài khoản (0 = không giới hạn)
-input int      InpMaxSymbolOrders  = DEF_MAX_SYMBOL_ORDERS;   // Max lệnh cho Symbol hiện tại
-input double   InpTPBuffer         = DEF_TP_BUFFER;           // TP Buffer (pips, 0 = chỉ dùng spread)
-input double   InpSRBufferPercent  = DEF_SR_BUFFER_PERCENT;   // S/R/MA Buffer (%) - Buffer cộng thêm vào S/R zone / MA line
+input double   InpMinStopLoss       = DEF_MIN_STOP_LOSS;           // Số points StopLoss tối thiểu
+input double   InpMaxRiskRewardRate = DEF_MAX_RISK_REWARD_RATE;    // Tỷ lệ Reward / Risk tối đa
+input double   InpMinRiskRewardRate = DEF_MIN_RISK_REWARD_RATE;    // Tỷ lệ Reward / Risk tối thiểu
+input int      InpMaxAccountOrders  = DEF_MAX_ACCOUNT_ORDERS;      // Max lệnh toàn tài khoản (0 = không giới hạn)
+input int      InpMaxSymbolOrders   = DEF_MAX_SYMBOL_ORDERS;       // Max lệnh cho Symbol hiện tại
+input double   InpTPBuffer          = DEF_TP_BUFFER;               // TP Buffer (pips, 0 = chỉ dùng spread)
+input double   InpSRBufferPercent   = DEF_SR_BUFFER_PERCENT;       // S/R/MA Buffer (%) - Buffer cộng thêm vào S/R zone / MA line
 
 // --- INDICATOR SETTINGS ---
 input ENUM_MA_TYPE_MODE InpMAType = DEF_MA_TYPE;       // Loại Moving Average (EMA phản ứng nhanh hơn)
@@ -225,7 +226,8 @@ int OnInit()
 // --- CONFIG INITIALIZATION ---
 // Core Settings
    g_config.minStopLoss = InpMinStopLoss;
-   g_config.riskRewardRate = InpRiskRewardRate;
+   g_config.maxRiskRewardRate = InpMaxRiskRewardRate;
+   g_config.minRiskRewardRate = InpMinRiskRewardRate;
    g_config.srBufferPercent = InpSRBufferPercent;
    g_config.minScoreToPass = InpMinScoreToPass;
 // Indicator Parameters
@@ -855,7 +857,7 @@ void ExecuteTrade(bool isBuy, const SignalResult &signal)
 // ============================================================
    PriceValidationResult priceValidation;
    ValidatePriceConstraints(isBuy, entryPrice, sl, tp,
-                            InpMinStopLoss, InpMinStopLoss, MIN_RISK_REWARD_RATE,
+                            InpMinStopLoss, InpMinStopLoss, InpMinRiskRewardRate,
                             g_pointValue, digits, priceValidation);
 
    if(!priceValidation.isValid)

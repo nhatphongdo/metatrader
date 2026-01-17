@@ -15,14 +15,6 @@
 #include "CandlePatterns.mqh"
 
 // ==================================================
-// ================= CONSTANTS ======================
-// ==================================================
-
-// Hệ số R/R tối thiểu cho validation sau khi trừ TP buffer
-// Giá trị 0.9 cho phép TP thấp hơn 10% so với SL do buffer đã trừ
-const double MIN_RISK_REWARD_RATE = 0.9;
-
-// ==================================================
 // =================== STRUCTS ======================
 // ==================================================
 
@@ -47,7 +39,8 @@ struct SMAPullbackConfig
    // ==============================================================
    double            minStopLoss;             // Số points stoploss tối thiểu
    double            minTakeProfit;           // Số points takeprofit tối thiểu
-   double            riskRewardRate;          // Tỷ lệ Reward / Risk
+   double            maxRiskRewardRate;       // Tỷ lệ Reward / Risk tối đa
+   double            minRiskRewardRate;       // Tỷ lệ Reward / Risk tối thiểu (0=none)
    double            srBufferPercent;         // Buffer (%) cộng thêm vào S/R khi tính SL/TP
    double            minScoreToPass;          // Điểm tối thiểu để signal được chấp nhận
 
@@ -441,7 +434,7 @@ void ProcessSignal(
       double tpBuffer = (localResistance - entry) * config.srBufferPercent / 100.0;
       double tpResistance = localResistance - tpBuffer;
       tp = MathMin(entry + risk, tpResistance);
-      for(double j = 1.1; j <= config.riskRewardRate; j += 0.1)
+      for(double j = 1.1; j <= config.maxRiskRewardRate; j += 0.1)
         {
          const double _tp = entry + risk * j;
          if(_tp <= tpResistance)
@@ -456,7 +449,7 @@ void ProcessSignal(
       double tpBuffer = (entry - localSupport) * config.srBufferPercent / 100.0;
       double tpSupport = localSupport + tpBuffer;
       tp = MathMax(entry - risk, tpSupport);
-      for(double j = 1.1; j <= config.riskRewardRate; j += 0.1)
+      for(double j = 1.1; j <= config.maxRiskRewardRate; j += 0.1)
         {
          const double _tp = entry - risk * j;
          if(_tp >= tpSupport)
@@ -476,7 +469,7 @@ void ProcessSignal(
    int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
    PriceValidationResult priceValidation;
    ValidatePriceConstraints(isBuySignal, entry, sl, tp,
-                            config.minStopLoss, config.minTakeProfit, MIN_RISK_REWARD_RATE,
+                            config.minStopLoss, config.minTakeProfit, config.minRiskRewardRate,
                             pointValue, digits, priceValidation);
 
    if(!priceValidation.isValid)

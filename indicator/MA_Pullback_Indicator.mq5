@@ -13,9 +13,9 @@
 // ==================================================
 
 // --- TRADE LIMITS ---
-input double   InpMinStopLoss     = DEF_MIN_STOP_LOSS;       // Số points StopLoss tối thiểu
-input double   InpRiskRewardRate  = DEF_RISK_REWARD_RATE;    // Tỷ lệ Reward / Risk
-input double   InpSRBufferPercent = DEF_SR_BUFFER_PERCENT;   // S/R/MA Buffer (%)
+input double   InpMinStopLoss        = DEF_MIN_STOP_LOSS;           // Số points StopLoss tối thiểu
+input double   InpMaxRiskRewardRate  = DEF_MAX_RISK_REWARD_RATE;    // Tỷ lệ Reward / Risk tối đa
+input double   InpSRBufferPercent    = DEF_SR_BUFFER_PERCENT;       // S/R/MA Buffer (%)
 
 // --- INDICATOR SETTINGS ---
 input ENUM_MA_TYPE_MODE InpMAType = DEF_MA_TYPE;        // Loại Moving Average
@@ -182,7 +182,7 @@ int OnInit()
 // --- CONFIG INITIALIZATION ---
 // Core Settings
    g_config.minStopLoss = InpMinStopLoss;
-   g_config.riskRewardRate = InpRiskRewardRate;
+   g_config.maxRiskRewardRate = InpMaxRiskRewardRate;
    g_config.srBufferPercent = InpSRBufferPercent;
    g_config.minScoreToPass = InpMinScoreToPass;
 // Indicator Parameters

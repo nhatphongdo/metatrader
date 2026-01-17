@@ -49,17 +49,18 @@ enum ENUM_MA_TYPE_MODE
 // --- TRADE LIMITS ---
 // Giới hạn giao dịch
 // Số points StopLoss tối thiểu (5 pips = 50 points)
-#define DEF_MIN_STOP_LOSS       50.0
+#define DEF_MIN_STOP_LOSS        50.0
 // Tỷ lệ Reward/Risk (1.5 = TP 1.5 lần SL)
-#define DEF_RISK_REWARD_RATE    1.5
+#define DEF_MAX_RISK_REWARD_RATE 1.5
+#define DEF_MIN_RISK_REWARD_RATE 0.8
 // Số lệnh tối đa toàn tài khoản, 0 = không giới hạn
-#define DEF_MAX_ACCOUNT_ORDERS  3
+#define DEF_MAX_ACCOUNT_ORDERS   3
 // Số lệnh tối đa cho mỗi symbol
-#define DEF_MAX_SYMBOL_ORDERS   1
+#define DEF_MAX_SYMBOL_ORDERS    1
 // Buffer thêm vào TP (pips)
-#define DEF_TP_BUFFER           0
+#define DEF_TP_BUFFER            0
 // Buffer cộng thêm vào S/R zone và MA line (%)
-#define DEF_SR_BUFFER_PERCENT   5.0
+#define DEF_SR_BUFFER_PERCENT    5.0
 
 // --- INDICATOR SETTINGS ---
 // Cài đặt các indicator kỹ thuật
@@ -80,9 +81,8 @@ enum ENUM_MA_TYPE_MODE
 
 // --- STRATEGY SETTINGS ---
 // Cài đặt chiến lược entry
-// Số nến tối đa chờ pullback (EA: chính xác hơn, Indicator: entry sớm hơn)
+// Số nến tối đa chờ pullback
 #define DEF_MAX_WAIT_BARS       20
-#define DEF_MAX_WAIT_BARS_INDI  10
 // Số nến tính ATR
 #define DEF_ATR_LENGTH          14
 // Tỷ lệ Bóng/Thân nến cho confirmation candle
