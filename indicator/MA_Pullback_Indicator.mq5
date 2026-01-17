@@ -6,176 +6,131 @@
 #property indicator_chart_window
 #property indicator_plots 0
 
-#include <MA_Pullback_Core.mqh>
-
-// ==================================================
-// ===================== ENUM ========================
-// ==================================================
-enum ENUM_MA_TYPE_MODE
-  {
-   MA_TYPE_SMA = MODE_SMA,  // SMA (Simple Moving Average)
-   MA_TYPE_EMA = MODE_EMA   // EMA (Exponential Moving Average)
-  };
+#include <MA_Pullback_Inputs.mqh>
 
 // ==================================================
 // ===================== INPUT =======================
 // ==================================================
 
 // --- TRADE LIMITS ---
-input double   InpMinStopLoss       = 50.0;           // Số points StopLoss tối thiểu (5 pips)
-input double   InpRiskRewardRate    = 1.5;            // Tỷ lệ Reward / Risk (1.5 = 1.5R)
-input double   InpSRBufferPercent   = 5.0;            // S/R/MA Buffer (%) - Buffer cộng thêm vào S/R zone, MA line
+input double   InpMinStopLoss     = DEF_MIN_STOP_LOSS;       // Số points StopLoss tối thiểu
+input double   InpRiskRewardRate  = DEF_RISK_REWARD_RATE;    // Tỷ lệ Reward / Risk
+input double   InpSRBufferPercent = DEF_SR_BUFFER_PERCENT;   // S/R/MA Buffer (%)
 
 // --- INDICATOR SETTINGS ---
-input ENUM_MA_TYPE_MODE InpMAType = MA_TYPE_SMA;    // Loại Moving Average (EMA phản ứng nhanh hơn)
-input int      InpMA50Period      = 50;             // Chu kỳ MA Fast
-input int      InpMA200Period     = 200;            // Chu kỳ MA Slow
-input int      InpRSIPeriod       = 14;             // Chu kỳ RSI
-input int      InpMACDFast        = 12;             // Chu kỳ MACD Fast
-input int      InpMACDSlow        = 26;             // Chu kỳ MACD Slow
-input int      InpMACDSignal      = 9;              // Chu kỳ MACD Signal
+input ENUM_MA_TYPE_MODE InpMAType = DEF_MA_TYPE;        // Loại Moving Average
+input int      InpMA50Period      = DEF_MA50_PERIOD;    // Chu kỳ MA Fast
+input int      InpMA200Period     = DEF_MA200_PERIOD;   // Chu kỳ MA Slow
+input int      InpRSIPeriod       = DEF_RSI_PERIOD;     // Chu kỳ RSI
+input int      InpMACDFast        = DEF_MACD_FAST;      // Chu kỳ MACD Fast
+input int      InpMACDSlow        = DEF_MACD_SLOW;      // Chu kỳ MACD Slow
+input int      InpMACDSignal      = DEF_MACD_SIGNAL;    // Chu kỳ MACD Signal
 
 // --- STRATEGY SETTINGS ---
-input int      InpMaxWaitBars     = 10;             // Số nến tối đa chờ pullback (ít hơn = entry sớm hơn)
-input int      InpATRLength       = 14;             // Số nến tính ATR (standard)
-input double   InpWickBodyRatio   = 1.5;            // Tỷ lệ Bóng/Thân nến (vừa phải)
+input int      InpMaxWaitBars     = DEF_MAX_WAIT_BARS;        // Số nến tối đa chờ pullback
+input int      InpATRLength       = DEF_ATR_LENGTH;           // Số nến tính ATR
+input double   InpWickBodyRatio   = DEF_WICK_BODY_RATIO;      // Tỷ lệ Bóng/Thân nến
 
 // ==================================================
 // ============== FILTER SETTINGS ===================
 // ==================================================
-input double   InpMinScoreToPass  = 60.0;           // Điểm Threshold để signal Valid (60/100)
+input double   InpMinScoreToPass  = DEF_MIN_SCORE_TO_PASS;   // Điểm Threshold để Valid
 
-// ==============================================================
 // FILTER 1: MA SLOPE
-// Kiểm tra độ dốc MA có đủ mạnh không
-// ==============================================================
-input bool     InpEnableMASlopeFilter = true;       // [Filter: MA Slope] Bật MA Slope (trend direction)
-input bool     InpMASlopeCritical     = false;      // [Filter: MA Slope] Critical
-input double   InpMA50SlopeThreshold  = 15.0;       // [Filter: MA Slope] MA Slope Threshold (độ, 15 = vừa phải)
-input int      InpSlopeSmoothBars     = 5;          // [Filter: MA Slope] Số nến tính Slope
-input double   InpMASlopeWeight       = 10.0;       // [Filter: MA Slope] Weight
+input bool     InpEnableMASlopeFilter = DEF_ENABLE_MA_SLOPE;        // [MA Slope] Bật
+input bool     InpMASlopeCritical     = DEF_MA_SLOPE_CRITICAL;      // [MA Slope] Critical
+input double   InpMA50SlopeThreshold  = DEF_MA50_SLOPE_THRESHOLD;   // [MA Slope] Threshold (độ)
+input int      InpSlopeSmoothBars     = DEF_SLOPE_SMOOTH_BARS;      // [MA Slope] Số nến tính Slope
+input double   InpMASlopeWeight       = DEF_MA_SLOPE_WEIGHT;        // [MA Slope] Weight
 
-// ==============================================================
-// FILTER 2A: STATIC MOMENTUM (RSI + MACD position)
-// Kiểm tra RSI và MACD có xác nhận xu hướng không
-// ==============================================================
-input bool     InpEnableStaticMomentum    = true;   // [Filter: Static Momentum] Bật Static Momentum (trend confirmation)
-input bool     InpStaticMomentumCritical  = false;  // [Filter: Static Momentum] Critical
-input double   InpStaticMomentumWeight    = 15.0;   // [Filter: Static Momentum] Weight
+// FILTER 2A: STATIC MOMENTUM
+input bool     InpEnableStaticMomentum    = DEF_ENABLE_STATIC_MOMENTUM;     // [Static Momentum] Bật
+input bool     InpStaticMomentumCritical  = DEF_STATIC_MOMENTUM_CRITICAL;   // [Static Momentum] Critical
+input double   InpStaticMomentumWeight    = DEF_STATIC_MOMENTUM_WEIGHT;     // [Static Momentum] Weight
 
-// ==============================================================
-// FILTER 2B: RSI REVERSAL DETECTION
-// Phát hiện RSI đang đi ngược hướng signal
-// ==============================================================
-input bool     InpEnableRSIReversal    = true;      // [Filter: RSI Reversal] Bật RSI Reversal
-input bool     InpRSIReversalCritical  = true;      // [Filter: RSI Reversal] Critical (quan trọng - phát hiện đảo chiều)
-input int      InpRSIReversalLookback  = 2;         // [Filter: RSI Reversal] Lookback (nến)
-input double   InpRSIReversalWeight    = 10.0;      // [Filter: RSI Reversal] Weight
+// FILTER 2B: RSI REVERSAL
+input bool     InpEnableRSIReversal    = DEF_ENABLE_RSI_REVERSAL;       // [RSI Reversal] Bật
+input bool     InpRSIReversalCritical  = DEF_RSI_REVERSAL_CRITICAL;     // [RSI Reversal] Critical
+input int      InpRSIReversalLookback  = DEF_RSI_REVERSAL_LOOKBACK;     // [RSI Reversal] Lookback
+input double   InpRSIReversalWeight    = DEF_RSI_REVERSAL_WEIGHT;       // [RSI Reversal] Weight
 
-// ==============================================================
-// FILTER 2C: MACD HISTOGRAM TREND
-// Phát hiện histogram đang mở rộng ngược hướng
-// ==============================================================
-input bool     InpEnableMACDHistogram    = true;    // [Filter: MACD Histogram] Bật MACD Histogram
-input bool     InpMACDHistogramCritical  = true;    // [Filter: MACD Histogram] Critical (quan trọng - momentum shift)
-input int      InpMACDHistogramLookback  = 2;       // [Filter: MACD Histogram] Lookback (nến)
-input double   InpMACDHistogramWeight    = 10.0;    // [Filter: MACD Histogram] Weight
+// FILTER 2C: MACD HISTOGRAM
+input bool     InpEnableMACDHistogram    = DEF_ENABLE_MACD_HISTOGRAM;        // [MACD Histogram] Bật
+input bool     InpMACDHistogramCritical  = DEF_MACD_HISTOGRAM_CRITICAL;      // [MACD Histogram] Critical
+input int      InpMACDHistogramLookback  = DEF_MACD_HISTOGRAM_LOOKBACK;      // [MACD Histogram] Lookback
+input double   InpMACDHistogramWeight    = DEF_MACD_HISTOGRAM_WEIGHT;        // [MACD Histogram] Weight
 
-// ==============================================================
 // FILTER 3: SMA200 TREND
-// Kiểm tra giá có cùng xu hướng với SMA200 không
-// ==============================================================
-input bool     InpEnableSMA200Filter = true;        // [Filter: SMA200 Trend] Bật SMA200 Trend
-input bool     InpSMA200Critical     = true;        // [Filter: SMA200 Trend] Critical (quan trọng - xác định xu hướng chính)
-input double   InpSMA200Weight       = 15.0;        // [Filter: SMA200 Trend] Weight
+input bool     InpEnableSMA200Filter = DEF_ENABLE_SMA200_FILTER;   // [SMA200 Trend] Bật
+input bool     InpSMA200Critical     = DEF_SMA200_CRITICAL;        // [SMA200 Trend] Critical
+input double   InpSMA200Weight       = DEF_SMA200_WEIGHT;          // [SMA200 Trend] Weight
 
-// ==============================================================
 // FILTER 4: S/R ZONE
-// Kiểm tra giá có trong vùng entry tốt không
-// ==============================================================
-input bool     InpEnableSRZoneFilter = true;        // [Filter: S/R Zone] Bật S/R Zone
-input bool     InpSRZoneCritical     = false;       // [Filter: S/R Zone] Critical
-input int      InpSRLookback         = 20;          // [Filter: S/R Zone] Lookback Bars
-input double   InpSRZonePercent      = 40.0;        // [Filter: S/R Zone] % Zone Width
-input double   InpSRZoneWeight       = 15.0;        // [Filter: S/R Zone] Weight
+input bool     InpEnableSRZoneFilter = DEF_ENABLE_SR_ZONE_FILTER;   // [S/R Zone] Bật
+input bool     InpSRZoneCritical     = DEF_SR_ZONE_CRITICAL;        // [S/R Zone] Critical
+input int      InpSRLookback         = DEF_SR_LOOKBACK;             // [S/R Zone] Lookback Bars
+input double   InpSRZonePercent      = DEF_SR_ZONE_PERCENT;         // [S/R Zone] % Zone Width
+input double   InpSRZoneWeight       = DEF_SR_ZONE_WEIGHT;          // [S/R Zone] Weight
 
-// ==============================================================
 // FILTER 4B: S/R MIN WIDTH
-// Lọc vùng S/R quá hẹp
-// ==============================================================
-input bool     InpEnableSRMinWidthFilter = true;    // [Filter: S/R Min Width] Bật S/R Min Width
-input bool     InpSRMinWidthCritical     = true;    // [Filter: S/R Min Width] Critical (quan trọng - đảm bảo vùng S/R đủ rộng để trade)
-input double   InpMinSRWidthATR          = 2.0;     // [Filter: S/R Min Width] Độ rộng S/R tối thiểu (2x ATR), timeframe nhỏ nên có bội số lớn
-input double   InpSRMinWidthWeight       = 10.0;    // [Filter: S/R Min Width] Weight
+input bool     InpEnableSRMinWidthFilter = DEF_ENABLE_SR_MIN_WIDTH;      // [S/R Min Width] Bật
+input bool     InpSRMinWidthCritical     = DEF_SR_MIN_WIDTH_CRITICAL;    // [S/R Min Width] Critical
+input double   InpMinSRWidthATR          = DEF_MIN_SR_WIDTH_ATR;         // [S/R Min Width] Độ rộng tối thiểu (xATR)
+input double   InpSRMinWidthWeight       = DEF_SR_MIN_WIDTH_WEIGHT;      // [S/R Min Width] Weight
 
-// ==============================================================
 // FILTER 5: MA NOISE
-// Lọc vùng giá dao động quanh MA50 (choppy)
-// ==============================================================
-input int      InpMinCutInterval          = 3;      // [Filter: MA Noise] Min Cut Interval (0=Off)
-input double   InpCutIntervalWeight       = 5.0;    // [Filter: MA Noise] Cut Interval Weight
-input int      InpMaxCutsInLookback       = 2;      // [Filter: MA Noise] Max Cuts in Lookback (0=Off)
-input int      InpCutsLookbackBars        = 15;     // [Filter: MA Noise] Cuts Lookback Bars
-input double   InpMaxCutsWeight           = 5.0;    // [Filter: MA Noise] Max Cuts Weight
-input double   InpPeakMADistanceThreshold = 0;      // [Filter: MA Noise] Peak-MA Threshold (0=Off)
-input double   InpPeakMADistWeight        = 5.0;    // [Filter: MA Noise] Peak-MA Weight
+input int      InpMinCutInterval          = DEF_MIN_CUT_INTERVAL;         // [MA Noise] Min Cut Interval
+input double   InpCutIntervalWeight       = DEF_CUT_INTERVAL_WEIGHT;      // [MA Noise] Cut Interval Weight
+input int      InpMaxCutsInLookback       = DEF_MAX_CUTS_IN_LOOKBACK;     // [MA Noise] Max Cuts in Lookback
+input int      InpCutsLookbackBars        = DEF_CUTS_LOOKBACK_BARS;       // [MA Noise] Cuts Lookback Bars
+input double   InpMaxCutsWeight           = DEF_MAX_CUTS_WEIGHT;          // [MA Noise] Max Cuts Weight
+input double   InpPeakMADistanceThreshold = DEF_PEAK_MA_DIST_THRESHOLD;   // [MA Noise] Peak-MA Threshold
+input double   InpPeakMADistWeight        = DEF_PEAK_MA_DIST_WEIGHT;      // [MA Noise] Peak-MA Weight
 
-// ==============================================================
 // FILTER 6: ADX TREND STRENGTH
-// Kiểm tra thị trường có đang trending không
-// ==============================================================
-input bool     InpEnableADXFilter        = true;    // [Filter: ADX Trend Strength] Bật ADX (trend strength)
-input bool     InpADXCritical            = false;   // [Filter: ADX Trend Strength] Critical
-input int      InpADXPeriod              = 14;      // [Filter: ADX Trend Strength] Chu kỳ ADX
-input double   InpMinADXThreshold        = 20.0;    // [Filter: ADX Trend Strength] Min ADX Threshold (20 = mild trend)
-input bool     InpADXDirectionalConfirm  = true;    // [Filter: ADX Trend Strength] Check +DI/-DI
-input double   InpADXWeight              = 10.0;    // [Filter: ADX Trend Strength] Weight
+input bool     InpEnableADXFilter        = DEF_ENABLE_ADX_FILTER;         // [ADX] Bật
+input bool     InpADXCritical            = DEF_ADX_CRITICAL;              // [ADX] Critical
+input int      InpADXPeriod              = DEF_ADX_PERIOD;                // [ADX] Chu kỳ
+input double   InpMinADXThreshold        = DEF_MIN_ADX_THRESHOLD;         // [ADX] Min Threshold
+input bool     InpADXDirectionalConfirm  = DEF_ADX_DIRECTIONAL_CONFIRM;   // [ADX] Check +DI/-DI
+input double   InpADXWeight              = DEF_ADX_WEIGHT;                // [ADX] Weight
 
-// ==============================================================
 // FILTER 7: BODY/ATR RATIO
-// Kiểm tra nến confirm có đủ mạnh không
-// ==============================================================
-input bool     InpEnableBodyATRFilter = true;       // [Filter: Body/ATR] Bật Body/ATR (candle strength)
-input bool     InpBodyATRCritical     = false;      // [Filter: Body/ATR] Critical
-input double   InpMinBodyATRRatio     = 0.25;       // [Filter: Body/ATR] Min Body/ATR Ratio (25% ATR)
-input double   InpBodyATRWeight       = 5.0;        // [Filter: Body/ATR] Weight
+input bool     InpEnableBodyATRFilter = DEF_ENABLE_BODY_ATR_FILTER;       // [Body/ATR] Bật
+input bool     InpBodyATRCritical     = DEF_BODY_ATR_CRITICAL;            // [Body/ATR] Critical
+input double   InpMinBodyATRRatio     = DEF_MIN_BODY_ATR_RATIO;           // [Body/ATR] Min Ratio
+input double   InpBodyATRWeight       = DEF_BODY_ATR_WEIGHT;              // [Body/ATR] Weight
 
-// ==============================================================
 // FILTER 8: VOLUME CONFIRMATION
-// Kiểm tra volume có đủ so với trung bình không
-// ==============================================================
-input bool     InpEnableVolumeFilter = false;       // [Filter: Volume Confirmation] Bật Volume (off by default - forex ko có volume thật)
-input bool     InpVolumeCritical     = false;       // [Filter: Volume Confirmation] Critical
-input int      InpVolumeAvgPeriod    = 20;          // [Filter: Volume Confirmation] Volume Avg Period
-input double   InpMinVolumeRatio     = 0.8;         // [Filter: Volume Confirmation] Min Volume Ratio (80% avg)
-input double   InpVolumeWeight       = 5.0;         // [Filter: Volume Confirmation] Weight
+input bool     InpEnableVolumeFilter = DEF_ENABLE_VOLUME_FILTER;   // [Volume] Bật
+input bool     InpVolumeCritical     = DEF_VOLUME_CRITICAL;        // [Volume] Critical
+input int      InpVolumeAvgPeriod    = DEF_VOLUME_AVG_PERIOD;      // [Volume] Avg Period
+input double   InpMinVolumeRatio     = DEF_MIN_VOLUME_RATIO;       // [Volume] Min Ratio
+input double   InpVolumeWeight       = DEF_VOLUME_WEIGHT;          // [Volume] Weight
 
-// ==============================================================
 // FILTER 9: PRICE-MA DISTANCE
-// Tránh chase - giá không quá xa MA50
-// ==============================================================
-input bool     InpEnablePriceMADistFilter = true;   // [Filter: Price-MA Distance] Bật Price-MA Dist
-input bool     InpPriceMADistCritical     = true;   // [Filter: Price-MA Distance] Critical (quan trọng - tránh chase)
-input double   InpMaxPriceMADistATR       = 1.5;    // [Filter: Price-MA Distance] Max Distance (1.5x ATR - không chase)
-input double   InpPriceMAWeight           = 10.0;   // [Filter: Price-MA Distance] Weight
+input bool     InpEnablePriceMADistFilter = DEF_ENABLE_PRICE_MA_DIST;      // [Price-MA] Bật
+input bool     InpPriceMADistCritical     = DEF_PRICE_MA_DIST_CRITICAL;    // [Price-MA] Critical
+input double   InpMaxPriceMADistATR       = DEF_MAX_PRICE_MA_DIST_ATR;     // [Price-MA] Max Distance (xATR)
+input double   InpPriceMAWeight           = DEF_PRICE_MA_DIST_WEIGHT;      // [Price-MA] Weight
 
 // ============== DISPLAY SETTINGS ==================
 // ==================================================
 
 // --- COLORS ---
-input color    InpBuyColor     = clrLime;           // Màu tín hiệu BUY
-input color    InpSellColor    = clrRed;            // Màu tín hiệu SELL
-input color    InpSLColor      = clrOrange;         // Màu đường Stoploss
-input color    InpTPColor      = clrAqua;           // Màu đường Take profit
-input color    InpStrongColor  = clrWhite;          // Màu label tín hiệu mạnh
-input color    InpWeakColor    = clrYellow;         // Màu label tín hiệu yếu
-input color    InpSupportColor = C'0,100,0';        // Màu vùng Support (xanh đậm)
-input color    InpResistColor  = C'139,0,0';        // Màu vùng Resistance (đỏ đậm)
-input color    InpCancelColor  = clrGray;           // Màu tín hiệu bị hủy
+input color    InpBuyColor     = DEF_BUY_COLOR;       // Màu tín hiệu BUY
+input color    InpSellColor    = DEF_SELL_COLOR;      // Màu tín hiệu SELL
+input color    InpSLColor      = DEF_SL_COLOR;        // Màu đường Stoploss
+input color    InpTPColor      = DEF_TP_COLOR;        // Màu đường Take profit
+input color    InpStrongColor  = DEF_STRONG_COLOR;    // Màu label tín hiệu mạnh
+input color    InpWeakColor    = DEF_WEAK_COLOR;      // Màu label tín hiệu yếu
+input color    InpSupportColor = DEF_SUPPORT_COLOR;   // Màu vùng Support
+input color    InpResistColor  = DEF_RESIST_COLOR;    // Màu vùng Resistance
+input color    InpCancelColor  = DEF_CANCEL_COLOR;    // Màu tín hiệu bị hủy
 
 // --- ALERTS ---
-input bool     InpAlertEnabled = true;             // Bật/tắt Alert popup
-input bool     InpPushEnabled  = true;             // Bật/tắt Push Notification
+input bool     InpAlertEnabled = DEF_ALERT_ENABLED;        // Bật/tắt Alert popup
+input bool     InpPushEnabled  = DEF_PUSH_ENABLED;         // Bật/tắt Push Notification
 
 // --- AUTO SETUP ---
 input bool     InpAutoAddIndicators = true;         // Tự động thêm SMA/RSI/MACD lên chart
@@ -225,18 +180,12 @@ int OnInit()
       return INIT_FAILED;
 
 // --- CONFIG INITIALIZATION ---
-
-// ==============================================================
-// 1. CORE SETTINGS
-// ==============================================================
+// Core Settings
    g_config.minStopLoss = InpMinStopLoss;
    g_config.riskRewardRate = InpRiskRewardRate;
    g_config.srBufferPercent = InpSRBufferPercent;
    g_config.minScoreToPass = InpMinScoreToPass;
-
-// ==============================================================
-// 2. INDICATOR PARAMETERS
-// ==============================================================
+// Indicator Parameters
    g_config.sma50Period = InpMA50Period;
    g_config.sma200Period = InpMA200Period;
    g_config.ma50SlopeThreshold = InpMA50SlopeThreshold;
@@ -246,71 +195,44 @@ int OnInit()
    g_config.macdSlow = InpMACDSlow;
    g_config.macdSignal = InpMACDSignal;
    g_config.adxPeriod = InpADXPeriod;
-
-// ==============================================================
-// 3. STRATEGY PARAMETERS
-// ==============================================================
+// Strategy Parameters
    g_config.maxWaitBars = InpMaxWaitBars;
    g_config.atrLength = InpATRLength;
    g_config.wickBodyRatio = InpWickBodyRatio;
-
-// ==============================================================
-// FILTER 1: MA SLOPE
-// ==============================================================
+// Filter 1: MA Slope
    g_config.enableMASlopeFilter = InpEnableMASlopeFilter;
    g_config.maSlopeCritical = InpMASlopeCritical;
    g_config.maSlopeWeight = InpMASlopeWeight;
-
-// ==============================================================
-// FILTER 2A: STATIC MOMENTUM
-// ==============================================================
+// Filter 2A: Static Momentum
    g_config.enableStaticMomentumFilter = InpEnableStaticMomentum;
    g_config.staticMomentumCritical = InpStaticMomentumCritical;
    g_config.staticMomentumWeight = InpStaticMomentumWeight;
-
-// ==============================================================
-// FILTER 2B: RSI REVERSAL
-// ==============================================================
+// Filter 2B: RSI Reversal
    g_config.enableRSIReversalFilter = InpEnableRSIReversal;
    g_config.rsiReversalCritical = InpRSIReversalCritical;
    g_config.rsiReversalLookback = InpRSIReversalLookback;
    g_config.rsiReversalWeight = InpRSIReversalWeight;
-
-// ==============================================================
-// FILTER 2C: MACD HISTOGRAM
-// ==============================================================
+// Filter 2C: MACD Histogram
    g_config.enableMACDHistogramFilter = InpEnableMACDHistogram;
    g_config.macdHistogramCritical = InpMACDHistogramCritical;
    g_config.macdHistogramLookback = InpMACDHistogramLookback;
    g_config.macdHistogramWeight = InpMACDHistogramWeight;
-
-// ==============================================================
-// FILTER 3: SMA200 TREND
-// ==============================================================
+// Filter 3: SMA200 Trend
    g_config.enableSMA200Filter = InpEnableSMA200Filter;
    g_config.sma200Critical = InpSMA200Critical;
    g_config.sma200Weight = InpSMA200Weight;
-
-// ==============================================================
-// FILTER 4: S/R ZONE
-// ==============================================================
+// Filter 4: S/R Zone
    g_config.enableSRZoneFilter = InpEnableSRZoneFilter;
    g_config.srZoneCritical = InpSRZoneCritical;
    g_config.srLookback = InpSRLookback;
    g_config.srZonePercent = InpSRZonePercent;
    g_config.srZoneWeight = InpSRZoneWeight;
-
-// ==============================================================
-// FILTER 4B: S/R MIN WIDTH
-// ==============================================================
+// Filter 4B: S/R Min Width
    g_config.enableSRMinWidthFilter = InpEnableSRMinWidthFilter;
    g_config.srMinWidthCritical = InpSRMinWidthCritical;
    g_config.minSRWidthATR = InpMinSRWidthATR;
    g_config.srMinWidthWeight = InpSRMinWidthWeight;
-
-// ==============================================================
-// FILTER 5: MA NOISE
-// ==============================================================
+// Filter 5: MA Noise
    g_config.minCutInterval = InpMinCutInterval;
    g_config.cutIntervalWeight = InpCutIntervalWeight;
    g_config.maxCutsInLookback = InpMaxCutsInLookback;
@@ -318,44 +240,29 @@ int OnInit()
    g_config.maxCutsWeight = InpMaxCutsWeight;
    g_config.peakMaDistanceThreshold = InpPeakMADistanceThreshold;
    g_config.peakMADistWeight = InpPeakMADistWeight;
-
-// ==============================================================
-// FILTER 6: ADX TREND STRENGTH
-// ==============================================================
+// Filter 6: ADX
    g_config.enableADXFilter = InpEnableADXFilter;
    g_config.adxCritical = InpADXCritical;
    g_config.minADXThreshold = InpMinADXThreshold;
    g_config.useADXDirectionalConfirm = InpADXDirectionalConfirm;
    g_config.adxWeight = InpADXWeight;
-
-// ==============================================================
-// FILTER 7: BODY/ATR RATIO
-// ==============================================================
+// Filter 7: Body/ATR
    g_config.enableBodyATRFilter = InpEnableBodyATRFilter;
    g_config.bodyATRCritical = InpBodyATRCritical;
    g_config.minBodyATRRatio = InpMinBodyATRRatio;
    g_config.bodyATRWeight = InpBodyATRWeight;
-
-// ==============================================================
-// FILTER 8: VOLUME CONFIRMATION
-// ==============================================================
+// Filter 8: Volume
    g_config.enableVolumeFilter = InpEnableVolumeFilter;
    g_config.volumeCritical = InpVolumeCritical;
    g_config.volumeAvgPeriod = InpVolumeAvgPeriod;
    g_config.minVolumeRatio = InpMinVolumeRatio;
    g_config.volumeWeight = InpVolumeWeight;
-
-// ==============================================================
-// FILTER 9: PRICE-MA DISTANCE
-// ==============================================================
+// Filter 9: Price-MA Distance
    g_config.enablePriceMADistanceFilter = InpEnablePriceMADistFilter;
    g_config.priceMADistCritical = InpPriceMADistCritical;
    g_config.maxPriceMADistanceATR = InpMaxPriceMADistATR;
    g_config.priceMADistWeight = InpPriceMAWeight;
-
-// ==============================================================
-// FILTER 10-12: TIME/NEWS/CONSEC LOSS (Disabled for Indicator)
-// ==============================================================
+// Filter 10-12: Not used in Indicator (EA only)
    g_config.enableTimeFilter = false;
    g_config.timeCritical = false;
    g_config.enableNewsFilter = false;

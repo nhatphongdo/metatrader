@@ -64,9 +64,10 @@ struct MAScoringConfig
 //+------------------------------------------------------------------+
 struct MAScoringResult
   {
-   double            totalScore;       // Tổng điểm từ tất cả MA filters
+   double            successScore;     // Tổng điểm từ các filter PASS
+   double            failScore;        // Tổng điểm từ các filter FAIL
    string            allReasons;       // Tất cả lý do fail (mỗi dòng 1 lý do)
-   bool              passed;           // Tất cả critical filters đều pass
+   string            filterDetails;    // Chi tiết đánh giá TẤT CẢ filter (dù pass hay không)
    int               lastCutDistance;  // Khoảng cách đến lần cắt gần nhất (bars)
    double            peakMaDistance;   // Khoảng cách peak-MA (points)
    int               cutCount;         // Số lần cắt trong lookback
@@ -379,14 +380,17 @@ void RunMAFilters(
 )
   {
 // Khởi tạo kết quả
-   outResult.totalScore = 0;
+   outResult.successScore = 0;
+   outResult.failScore = 0;
    outResult.allReasons = "";
-   outResult.passed = true;  // Mặc định pass, sẽ fail nếu có filter critical fail
+   outResult.filterDetails = "";
    outResult.lastCutDistance = -1;
    outResult.peakMaDistance = 0;
    outResult.cutCount = 0;
 
    ScoringFilterResult filterResult;
+   string statusStr;
+   double penalty;
 
 // -----------------------------------------------------------------
 // FILTER 1: CUT INTERVAL
@@ -394,12 +398,17 @@ void RunMAFilters(
    int lastCutDistance = -1;
    filterResult = CheckCutIntervalFilter(config, cutIdx, open, close, ma, tickSize, arraySize, lastCutDistance);
    outResult.lastCutDistance = lastCutDistance;
-   outResult.totalScore += filterResult.score;
-   if(!filterResult.passed)
+   if(filterResult.passed)
+      outResult.successScore += config.cutIntervalWeight;
+   else
+      outResult.failScore += config.cutIntervalWeight;
+   statusStr = filterResult.passed ? "✓" : "✗";
+   penalty = filterResult.passed ? 0 : config.cutIntervalWeight;
+   outResult.filterDetails += StringFormat("[MA-1] Cut Interval %s: %d bars (min=%d) | -%.0f pts\n",
+                                           statusStr, lastCutDistance, config.minCutInterval, penalty);
+   if(!filterResult.passed && filterResult.reason != "")
      {
-      outResult.passed = false;
-      if(filterResult.reason != "")
-         outResult.allReasons += "- " + filterResult.reason + "\n";
+      outResult.allReasons += "- " + filterResult.reason + "\n";
      }
 
 // -----------------------------------------------------------------
@@ -409,12 +418,17 @@ void RunMAFilters(
    filterResult = CheckPeakMADistanceFilter(config, isBuySignal, cutIdx, lastCutDistance,
                   high, low, ma, pointValue, arraySize, peakMaDistance);
    outResult.peakMaDistance = peakMaDistance;
-   outResult.totalScore += filterResult.score;
-   if(!filterResult.passed)
+   if(filterResult.passed)
+      outResult.successScore += config.peakMADistWeight;
+   else
+      outResult.failScore += config.peakMADistWeight;
+   statusStr = filterResult.passed ? "✓" : "✗";
+   penalty = filterResult.passed ? 0 : config.peakMADistWeight;
+   outResult.filterDetails += StringFormat("[MA-2] Peak-MA %s: %.1f pts (min=%.1f) | -%.0f pts\n",
+                                           statusStr, peakMaDistance, config.peakMaDistanceThreshold, penalty);
+   if(!filterResult.passed && filterResult.reason != "")
      {
-      outResult.passed = false;
-      if(filterResult.reason != "")
-         outResult.allReasons += "- " + filterResult.reason + "\n";
+      outResult.allReasons += "- " + filterResult.reason + "\n";
      }
 
 // -----------------------------------------------------------------
@@ -423,12 +437,17 @@ void RunMAFilters(
    int cutCount = 0;
    filterResult = CheckMaxCutsFilter(config, cutIdx, open, close, ma, tickSize, arraySize, cutCount);
    outResult.cutCount = cutCount;
-   outResult.totalScore += filterResult.score;
-   if(!filterResult.passed)
+   if(filterResult.passed)
+      outResult.successScore += config.maxCutsWeight;
+   else
+      outResult.failScore += config.maxCutsWeight;
+   statusStr = filterResult.passed ? "✓" : "✗";
+   penalty = filterResult.passed ? 0 : config.maxCutsWeight;
+   outResult.filterDetails += StringFormat("[MA-3] Max Cuts %s: %d (max=%d) | -%.0f pts\n",
+                                           statusStr, cutCount, config.maxCutsInLookback, penalty);
+   if(!filterResult.passed && filterResult.reason != "")
      {
-      outResult.passed = false;
-      if(filterResult.reason != "")
-         outResult.allReasons += "- " + filterResult.reason + "\n";
+      outResult.allReasons += "- " + filterResult.reason + "\n";
      }
   }
 

@@ -31,6 +31,7 @@ struct SignalResult
    double            score;
    string            strength; // WEAK, MEDIUM, STRONG
    string            reasons;  // List of reasons separated by newline
+   string            filterDetails; // Chi tiết đánh giá TẤT CẢ filter (dù pass hay không)
    bool              isCriticalFail;
    double            entry;
    double            sl;
@@ -246,10 +247,12 @@ void ProcessSignal(
    SignalResult &outResult
 )
   {
-   outResult.score = 0;
+   outResult.score = 100;  // Bắt đầu với 100, sẽ trừ dần bằng failScore
    outResult.reasons = "";
+   outResult.filterDetails = "";
    outResult.isCriticalFail = false;
    outResult.strength = "NONE";
+   double totalFailScore = 0; // Track tổng điểm fail
 
 // 1. Run MA Filters (Cut Interval, Peak-MA, Max Cuts)
    MAScoringConfig maConfig;
@@ -271,9 +274,10 @@ void ProcessSignal(
    RunMAFilters(maConfig, isBuySignal, cutIdx, open, high, low, close, sma50,
                 tickSize, pointValue, ArraySize(high), maResult);
 
-   outResult.score += maResult.totalScore;
+   totalFailScore += maResult.failScore; // Gộp failScore từ MA filters
    if(maResult.allReasons != "")
       outResult.reasons += maResult.allReasons;
+   outResult.filterDetails += maResult.filterDetails;
 
 // 2. Run Unified Filters
    UnifiedScoringConfig uniConfig;
@@ -361,8 +365,12 @@ void ProcessSignal(
                             adxMain, adxPlusDI, adxMinusDI,
                             tickSize, pointValue, ArraySize(high), scoringResult);
 
-   outResult.score += scoringResult.totalScore;
+   totalFailScore += scoringResult.failScore; // Gộp failScore từ Unified filters
    outResult.reasons += scoringResult.allReasons;
+   outResult.filterDetails += scoringResult.filterDetails;
+
+// Tính điểm cuối cùng = 100 - totalFailScore
+   outResult.score = outResult.score - totalFailScore;
 
    double localSupport = scoringResult.support;
    double localResistance = scoringResult.resistance;

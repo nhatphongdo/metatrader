@@ -192,11 +192,12 @@ struct ScoringFilterResult
 //+------------------------------------------------------------------+
 struct UnifiedScoringResult
   {
-   double            totalScore;      // Tổng điểm từ tất cả filters
+   double            successScore;    // Tổng điểm từ các filter PASS
+   double            failScore;       // Tổng điểm từ các filter FAIL
    string            allReasons;      // Tất cả lý do fail (mỗi dòng 1 lý do)
+   string            filterDetails;   // Chi tiết đánh giá TẤT CẢ filter (dù pass hay không)
    double            support;         // Vùng hỗ trợ tính được
    double            resistance;      // Vùng kháng cự tính được
-   bool              passed;          // totalScore >= minScoreToPass
    bool              hasCriticalFail; // Có lỗi nghiêm trọng (S/R không hợp lệ)
   };
 
@@ -211,12 +212,15 @@ struct UnifiedScoringResult
 //| Kiểm tra độ dốc của MA50 sử dụng linear regression               |
 //| Sử dụng slopeSmoothBars nến để tính slope chính xác hơn          |
 //| Công thức: Linear regression để tìm slope, convert sang độ       |
+//| Slope được scale theo ATR để tự động điều chỉnh theo biến động   |
 //+------------------------------------------------------------------+
 ScoringFilterResult CheckMASlopeFilter(
    const UnifiedScoringConfig &config,
    bool isBuySignal,
    int confirmIdx,
    const double &ma50[],
+   const double &high[],
+   const double &low[],
    double pointValue,
    int arraySize
 )
@@ -234,29 +238,24 @@ ScoringFilterResult CheckMASlopeFilter(
       return result;
      }
 
-   double angle = 0;
+// Tính ATR từ high/low để scale slope theo biến động thực tế
+   int atrBars = MathMin(config.atrLength, arraySize - confirmIdx - 1);  // ATR từ config
+   double atr = 0;
+   for(int i = 0; i < atrBars; i++)
+      atr += high[confirmIdx + i] - low[confirmIdx + i];
+   if(atrBars > 0)
+      atr = atr / atrBars;
 
-// Nếu slopeSmoothBars <= 1, dùng tính toán 2-bar đơn giản
-   if(config.slopeSmoothBars <= 1)
-     {
-      // ArraySetAsSeries=true: index nhỏ = mới, index lớn = cũ
-      // sma50[confirmIdx] - sma50[confirmIdx+1] = giá trị mới - giá trị cũ
-      // Nếu dương = uptrend, âm = downtrend
-      double delta = (ma50[confirmIdx] - ma50[confirmIdx + 1]) / pointValue;
-      angle = MathArctan(delta) * 180 / M_PI;
-     }
-   else
-     {
-      // Sử dụng Linear Regression để tính slope chính xác hơn
-      // y = a + b*x, trong đó x là bar index, y là giá trị MA50
+   double atrPoints = atr / pointValue;  // Chuyển ATR sang points
 
-      int endIdx = confirmIdx + config.slopeSmoothBars;
-      if(endIdx >= arraySize)
-         endIdx = arraySize - 1;
+// Tính slope bằng Linear Regression
+   int slopeBars = config.slopeSmoothBars;
+   if(slopeBars < 2)
+      slopeBars = 2;  // Tối thiểu 2 bars
+   if(confirmIdx + slopeBars >= arraySize)
+      slopeBars = arraySize - confirmIdx - 1;
 
-      int actualBars = endIdx - confirmIdx;
-      angle = CalculateLinearRegressionSlope(ma50, confirmIdx, actualBars, pointValue);
-     }
+   double angle = CalculateLinearRegressionSlope(ma50, confirmIdx, slopeBars, pointValue, atrPoints);
 
    result.value = angle;
 
@@ -1086,20 +1085,30 @@ void RunUnifiedScoringFilters(
 )
   {
 // Khởi tạo kết quả
-   outResult.totalScore = 0;
+   outResult.successScore = 0;
+   outResult.failScore = 0;
    outResult.allReasons = "";
+   outResult.filterDetails = "";
    outResult.support = 0;
    outResult.resistance = 0;
-   outResult.passed = false;
    outResult.hasCriticalFail = false;
 
    ScoringFilterResult filterResult;
+   string statusStr;
+   double penalty;
 
 // -----------------------------------------------------------------
 // FILTER 1: MA SLOPE
 // -----------------------------------------------------------------
-   filterResult = CheckMASlopeFilter(config, isBuySignal, confirmIdx, ma50, pointValue, arraySize);
-   outResult.totalScore += filterResult.score;
+   filterResult = CheckMASlopeFilter(config, isBuySignal, confirmIdx, ma50, high, low, pointValue, arraySize);
+   if(filterResult.passed)
+      outResult.successScore += config.maSlopeWeight;
+   else
+      outResult.failScore += config.maSlopeWeight;
+   statusStr = filterResult.passed ? "✓" : "✗";
+   penalty = filterResult.passed ? 0 : config.maSlopeWeight;
+   outResult.filterDetails += StringFormat("[FT-1] MA Slope %s: %.1f° (threshold=%.1f°) | -%.0f pts\n",
+                                           statusStr, filterResult.value, config.maSlopeThreshold, penalty);
    if(!filterResult.passed && filterResult.reason != "")
      {
       outResult.allReasons += "- " + filterResult.reason + "\n";
@@ -1111,7 +1120,14 @@ void RunUnifiedScoringFilters(
 // FILTER 2A: STATIC MOMENTUM (RSI + MACD position)
 // -----------------------------------------------------------------
    filterResult = CheckStaticMomentumFilter(config, isBuySignal, confirmIdx, rsi, macdMain, macdSignal);
-   outResult.totalScore += filterResult.score;
+   if(filterResult.passed)
+      outResult.successScore += config.staticMomentumWeight;
+   else
+      outResult.failScore += config.staticMomentumWeight;
+   statusStr = filterResult.passed ? "✓" : "✗";
+   penalty = filterResult.passed ? 0 : config.staticMomentumWeight;
+   outResult.filterDetails += StringFormat("[FT-2A] Static Momentum %s: RSI=%.1f, MACD=%.5f | -%.0f pts\n",
+                                           statusStr, rsi[confirmIdx], macdMain[confirmIdx] - macdSignal[confirmIdx], penalty);
    if(!filterResult.passed && filterResult.reason != "")
      {
       outResult.allReasons += "- " + filterResult.reason + "\n";
@@ -1123,7 +1139,14 @@ void RunUnifiedScoringFilters(
 // FILTER 2B: RSI REVERSAL
 // -----------------------------------------------------------------
    filterResult = CheckRSIReversalFilter(config, isBuySignal, confirmIdx, rsi, arraySize);
-   outResult.totalScore += filterResult.score;
+   if(filterResult.passed)
+      outResult.successScore += config.rsiReversalWeight;
+   else
+      outResult.failScore += config.rsiReversalWeight;
+   statusStr = filterResult.passed ? "✓" : "✗";
+   penalty = filterResult.passed ? 0 : config.rsiReversalWeight;
+   outResult.filterDetails += StringFormat("[FT-2B] RSI Reversal %s: delta=%.1f | -%.0f pts\n",
+                                           statusStr, filterResult.value, penalty);
    if(!filterResult.passed && filterResult.reason != "")
      {
       outResult.allReasons += "- " + filterResult.reason + "\n";
@@ -1135,7 +1158,14 @@ void RunUnifiedScoringFilters(
 // FILTER 2C: MACD HISTOGRAM TREND
 // -----------------------------------------------------------------
    filterResult = CheckMACDHistogramFilter(config, isBuySignal, confirmIdx, macdMain, macdSignal, arraySize);
-   outResult.totalScore += filterResult.score;
+   if(filterResult.passed)
+      outResult.successScore += config.macdHistogramWeight;
+   else
+      outResult.failScore += config.macdHistogramWeight;
+   statusStr = filterResult.passed ? "✓" : "✗";
+   penalty = filterResult.passed ? 0 : config.macdHistogramWeight;
+   outResult.filterDetails += StringFormat("[FT-2C] MACD Hist %s: delta=%.5f | -%.0f pts\n",
+                                           statusStr, filterResult.value, penalty);
    if(!filterResult.passed && filterResult.reason != "")
      {
       outResult.allReasons += "- " + filterResult.reason + "\n";
@@ -1147,7 +1177,14 @@ void RunUnifiedScoringFilters(
 // FILTER 3: SMA200 TREND
 // -----------------------------------------------------------------
    filterResult = CheckSMA200Filter(config, isBuySignal, confirmIdx, close, sma200, tickSize);
-   outResult.totalScore += filterResult.score;
+   if(filterResult.passed)
+      outResult.successScore += config.sma200Weight;
+   else
+      outResult.failScore += config.sma200Weight;
+   statusStr = filterResult.passed ? "✓" : "✗";
+   penalty = filterResult.passed ? 0 : config.sma200Weight;
+   outResult.filterDetails += StringFormat("[FT-3] SMA200 Trend %s: diff=%.5f | -%.0f pts\n",
+                                           statusStr, filterResult.value, penalty);
    if(!filterResult.passed && filterResult.reason != "")
      {
       outResult.allReasons += "- " + filterResult.reason + "\n";
@@ -1168,12 +1205,20 @@ void RunUnifiedScoringFilters(
 // S/R không hợp lệ là critical fail - DỪNG NGAY vì không thể tính tiếp
    if(filterResult.reason == "Lỗi S/R")
      {
+      outResult.filterDetails += "[FT-4] S/R Zone ✗: Lỗi S/R\n";
       outResult.allReasons += "- " + filterResult.reason + "\n";
       outResult.hasCriticalFail = true;
       return;
      }
 
-   outResult.totalScore += filterResult.score;
+   if(filterResult.passed)
+      outResult.successScore += config.srZoneWeight;
+   else
+      outResult.failScore += config.srZoneWeight;
+   statusStr = filterResult.passed ? "✓" : "✗";
+   penalty = filterResult.passed ? 0 : config.srZoneWeight;
+   outResult.filterDetails += StringFormat("[FT-4] S/R Zone %s: S=%.5f, R=%.5f | -%.0f pts\n",
+                                           statusStr, support, resistance, penalty);
    if(!filterResult.passed && filterResult.reason != "")
      {
       outResult.allReasons += "- " + filterResult.reason + "\n";
@@ -1187,7 +1232,14 @@ void RunUnifiedScoringFilters(
    double srRangeATR = 0;
    filterResult = CheckSRMinWidthFilter(config, confirmIdx, support, resistance,
                                         high, low, arraySize, srRangeATR);
-   outResult.totalScore += filterResult.score;
+   if(filterResult.passed)
+      outResult.successScore += config.srMinWidthWeight;
+   else
+      outResult.failScore += config.srMinWidthWeight;
+   statusStr = filterResult.passed ? "✓" : "✗";
+   penalty = filterResult.passed ? 0 : config.srMinWidthWeight;
+   outResult.filterDetails += StringFormat("[FT-4B] SR Width %s: %.1f ATR (min=%.1f) | -%.0f pts\n",
+                                           statusStr, srRangeATR, config.minSRWidthATR, penalty);
    if(!filterResult.passed && filterResult.reason != "")
      {
       outResult.allReasons += "- " + filterResult.reason + "\n";
@@ -1200,7 +1252,14 @@ void RunUnifiedScoringFilters(
 // -----------------------------------------------------------------
    filterResult = CheckADXFilter(config, isBuySignal, confirmIdx,
                                  adxMain, adxPlusDI, adxMinusDI);
-   outResult.totalScore += filterResult.score;
+   if(filterResult.passed)
+      outResult.successScore += config.adxWeight;
+   else
+      outResult.failScore += config.adxWeight;
+   statusStr = filterResult.passed ? "✓" : "✗";
+   penalty = filterResult.passed ? 0 : config.adxWeight;
+   outResult.filterDetails += StringFormat("[FT-5] ADX %s: %.1f (+DI=%.1f, -DI=%.1f) | -%.0f pts\n",
+                                           statusStr, filterResult.value, adxPlusDI[confirmIdx], adxMinusDI[confirmIdx], penalty);
    if(!filterResult.passed && filterResult.reason != "")
      {
       outResult.allReasons += "- " + filterResult.reason + "\n";
@@ -1212,7 +1271,14 @@ void RunUnifiedScoringFilters(
 // FILTER 6: BODY/ATR RATIO
 // -----------------------------------------------------------------
    filterResult = CheckBodyATRFilter(config, confirmIdx, open, close, high, low, arraySize);
-   outResult.totalScore += filterResult.score;
+   if(filterResult.passed)
+      outResult.successScore += config.bodyATRWeight;
+   else
+      outResult.failScore += config.bodyATRWeight;
+   statusStr = filterResult.passed ? "✓" : "✗";
+   penalty = filterResult.passed ? 0 : config.bodyATRWeight;
+   outResult.filterDetails += StringFormat("[FT-6] Body/ATR %s: %.3f (min=%.3f) | -%.0f pts\n",
+                                           statusStr, filterResult.value, config.minBodyATRRatio, penalty);
    if(!filterResult.passed && filterResult.reason != "")
      {
       outResult.allReasons += "- " + filterResult.reason + "\n";
@@ -1224,7 +1290,14 @@ void RunUnifiedScoringFilters(
 // FILTER 7: VOLUME
 // -----------------------------------------------------------------
    filterResult = CheckVolumeFilter(config, confirmIdx, volume, arraySize);
-   outResult.totalScore += filterResult.score;
+   if(filterResult.passed)
+      outResult.successScore += config.volumeWeight;
+   else
+      outResult.failScore += config.volumeWeight;
+   statusStr = filterResult.passed ? "✓" : "✗";
+   penalty = filterResult.passed ? 0 : config.volumeWeight;
+   outResult.filterDetails += StringFormat("[FT-7] Volume %s: %.2fx (min=%.2f) | -%.0f pts\n",
+                                           statusStr, filterResult.value, config.minVolumeRatio, penalty);
    if(!filterResult.passed && filterResult.reason != "")
      {
       outResult.allReasons += "- " + filterResult.reason + "\n";
@@ -1236,7 +1309,14 @@ void RunUnifiedScoringFilters(
 // FILTER 8: PRICE-MA DISTANCE
 // -----------------------------------------------------------------
    filterResult = CheckPriceMADistFilter(config, confirmIdx, close, high, low, ma50, arraySize);
-   outResult.totalScore += filterResult.score;
+   if(filterResult.passed)
+      outResult.successScore += config.priceMADistWeight;
+   else
+      outResult.failScore += config.priceMADistWeight;
+   statusStr = filterResult.passed ? "✓" : "✗";
+   penalty = filterResult.passed ? 0 : config.priceMADistWeight;
+   outResult.filterDetails += StringFormat("[FT-8] Price-MA %s: %.2f ATR (max=%.2f) | -%.0f pts\n",
+                                           statusStr, filterResult.value, config.maxPriceMADistATR, penalty);
    if(!filterResult.passed && filterResult.reason != "")
      {
       outResult.allReasons += "- " + filterResult.reason + "\n";
@@ -1248,7 +1328,14 @@ void RunUnifiedScoringFilters(
 // FILTER 9: TIME
 // -----------------------------------------------------------------
    filterResult = CheckTimeFilter(config, currentTime);
-   outResult.totalScore += filterResult.score;
+   if(filterResult.passed)
+      outResult.successScore += config.timeWeight;
+   else
+      outResult.failScore += config.timeWeight;
+   statusStr = filterResult.passed ? "✓" : "✗";
+   penalty = filterResult.passed ? 0 : config.timeWeight;
+   outResult.filterDetails += StringFormat("[FT-9] Time %s: hour=%.0f (%d-%d) | -%.0f pts\n",
+                                           statusStr, filterResult.value, config.tradeStartHour, config.tradeEndHour, penalty);
    if(!filterResult.passed && filterResult.reason != "")
      {
       outResult.allReasons += "- " + filterResult.reason + "\n";
@@ -1260,18 +1347,20 @@ void RunUnifiedScoringFilters(
 // FILTER 10: NEWS
 // -----------------------------------------------------------------
    filterResult = CheckNewsFilter(config, symbol, currentTime);
-   outResult.totalScore += filterResult.score;
+   if(filterResult.passed)
+      outResult.successScore += config.newsWeight;
+   else
+      outResult.failScore += config.newsWeight;
+   statusStr = filterResult.passed ? "✓" : "✗";
+   penalty = filterResult.passed ? 0 : config.newsWeight;
+   outResult.filterDetails += StringFormat("[FT-10] News %s | -%.0f pts\n",
+                                           statusStr, penalty);
    if(!filterResult.passed && filterResult.reason != "")
      {
       outResult.allReasons += "- " + filterResult.reason + "\n";
       if(config.newsCritical)
          outResult.hasCriticalFail = true;
      }
-
-// -----------------------------------------------------------------
-// ĐÁNH GIÁ KẾT QUẢ CUỐI CÙNG
-// -----------------------------------------------------------------
-   outResult.passed = (outResult.totalScore >= config.minScoreToPass);
   }
 
 #endif // SIGNAL_FILTERS_H

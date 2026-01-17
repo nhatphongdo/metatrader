@@ -51,44 +51,62 @@ bool IsGreaterThan(const double number1, const double number2, double tickSize)
 
 //+------------------------------------------------------------------+
 //| Calculate smoothed slope using Linear Regression                 |
-//| Returns angle in degrees                                         |
+//| Returns angle in degrees, scaled by ATR for market adaptation    |
+//| Slope = (points change per bar) / ATR, then converted to angle   |
+//| atrPoints là ATR tính bằng points (đã chia cho pointValue)       |
 //+------------------------------------------------------------------+
 double CalculateLinearRegressionSlope(
    const double &data[],      // Source data (e.g., MA array)
    int startIdx,             // Start index (newer bar)
    int count,                // Number of bars
-   double pointValue         // To normalize price to points
+   double pointValue,        // To normalize price to points
+   double atrPoints          // ATR in points for scaling (0 = use default 500)
 )
   {
+// Validate và fallback ATR
+   if(atrPoints <= 0)
+      atrPoints = 500;  // Default fallback
+
+// Hệ số scale ATR: 0.1 = 10% ATR/bar cho góc 45°
+// Điều này có nghĩa:
+// - 0.1 ATR/bar = 45° (trend cực mạnh)
+// - 0.05 ATR/bar = ~27° (trend mạnh)
+// - 0.02 ATR/bar = ~11° (trend trung bình)
+// - 0.01 ATR/bar = ~5.7° (trend nhẹ)
+   const double ATR_SCALE_FACTOR = 0.1;
+   double scalingBase = atrPoints * ATR_SCALE_FACTOR;
+
    if(count < 2)
      {
-      // Fallback to 2-bar nếu không đủ data
-      double delta = (data[startIdx] - data[startIdx + 1]) / pointValue;
-      return MathArctan(delta) * 180 / M_PI;
+      // Fallback to 2-bar: tính slope đơn giản
+      double deltaPoints = (data[startIdx] - data[startIdx + 1]) / pointValue;
+      return MathArctan(deltaPoints / scalingBase) * 180 / M_PI;
      }
 
-// Tính linear regression
+// Tính linear regression với y = giá trị points
    double sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
 
    for(int i = 0; i < count; i++)
      {
       double x = (double)i;
-      double y = data[startIdx + i] / pointValue; // Normalize
+      double y = data[startIdx + i] / pointValue; // Chuyển sang points
       sumX += x;
       sumY += y;
       sumXY += x * y;
       sumX2 += x * x;
      }
 
-   double slope = (count * sumXY - sumX * sumY) / (count * sumX2 - sumX * sumX);
+// Slope = points thay đổi per bar
+   double slopePointsPerBar = (count * sumXY - sumX * sumY) / (count * sumX2 - sumX * sumX);
 
-// Slope should be negative when price goes up (newer = lower index)
-// Because x increases as we go back in time (index increases)
-// So positive slope means value increases as index increases (value was higher in past -> downtrend)
-// We want positive slope = uptrend (value higher in future/lower index) -> negate it
-   slope = -slope;
+// Đảo dấu vì x tăng = đi ngược thời gian
+// slope âm ban đầu = giá tăng theo thời gian = uptrend
+   slopePointsPerBar = -slopePointsPerBar;
 
-   return MathArctan(slope) * 180 / M_PI;
+// Scale theo ATR (với hệ số) để góc có ý nghĩa thực tế
+   double scaledSlope = slopePointsPerBar / scalingBase;
+
+   return MathArctan(scaledSlope) * 180 / M_PI;
   }
 
 
