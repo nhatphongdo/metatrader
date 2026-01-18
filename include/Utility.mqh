@@ -694,4 +694,192 @@ double CalculateATR(
   }
 
 
+// ============================================================
+// =================== CANDLE UTILITIES =======================
+// ============================================================
+
+//+------------------------------------------------------------------+
+//| Lấy N candles từ timeframe bất kỳ tính từ thời điểm chỉ định     |
+//| Params:                                                          |
+//|   symbol     - Symbol cần lấy dữ liệu (NULL = symbol hiện tại)   |
+//|   timeframe  - Timeframe cần lấy (không phụ thuộc chart)         |
+//|   fromTime   - Thời điểm bắt đầu (lấy từ đây về trước)           |
+//|   count      - Số candles cần lấy                                |
+//|   time[]     - Mảng output thời gian                             |
+//|   open[]     - Mảng output giá mở cửa                            |
+//|   high[]     - Mảng output giá cao nhất                          |
+//|   low[]      - Mảng output giá thấp nhất                         |
+//|   close[]    - Mảng output giá đóng cửa                          |
+//|   volume[]   - Mảng output khối lượng (tick volume)              |
+//| Return: Số candles thực tế đã lấy được, -1 nếu lỗi               |
+//| Note: index [0] là candle gần nhất với fromTime                  |
+//+------------------------------------------------------------------+
+int GetHistoricalCandles(
+   const string symbol,
+   ENUM_TIMEFRAMES timeframe,
+   datetime fromTime,
+   int count,
+   datetime &time[],
+   double &open[],
+   double &high[],
+   double &low[],
+   double &close[],
+   long &volume[]
+)
+  {
+   if(count <= 0)
+      return -1;
+
+   string sym = (symbol == NULL || symbol == "") ? Symbol() : symbol;
+
+// Tìm index của candle tại hoặc trước fromTime
+   int startBar = iBarShift(sym, timeframe, fromTime, false);
+   if(startBar < 0)
+     {
+      Print("GetHistoricalCandles: Không tìm thấy bar tại thời điểm ", fromTime);
+      return -1;
+     }
+
+// Đảm bảo không vượt quá số bars có sẵn
+   int availableBars = iBars(sym, timeframe);
+   int actualCount = MathMin(count, availableBars - startBar);
+   if(actualCount <= 0)
+     {
+      Print("GetHistoricalCandles: Không đủ dữ liệu lịch sử");
+      return -1;
+     }
+
+// Copy dữ liệu từng candle
+   MqlRates rates[];
+   ArraySetAsSeries(rates, true);
+
+   int copied = CopyRates(sym, timeframe, startBar, actualCount, rates);
+   if(copied <= 0)
+     {
+      Print("GetHistoricalCandles: Lỗi CopyRates, error code = ", GetLastError());
+      return -1;
+     }
+
+// Resize các mảng output
+   ArrayResize(time, copied);
+   ArrayResize(open, copied);
+   ArrayResize(high, copied);
+   ArrayResize(low, copied);
+   ArrayResize(close, copied);
+   ArrayResize(volume, copied);
+
+// Copy dữ liệu vào các mảng riêng biệt (rates đã là series nên [0] là candle mới nhất)
+   for(int i = 0; i < copied; i++)
+     {
+      time[i] = rates[i].time;
+      open[i] = rates[i].open;
+      high[i] = rates[i].high;
+      low[i] = rates[i].low;
+      close[i] = rates[i].close;
+      volume[i] = rates[i].tick_volume;
+     }
+
+   return copied;
+  }
+
+// ============================================================
+// =================== TIMEFRAME UTILITIES ====================
+// ============================================================
+
+//+------------------------------------------------------------------+
+//| Danh sách tất cả các timeframe chuẩn của MT5                     |
+//+------------------------------------------------------------------+
+ENUM_TIMEFRAMES g_allTimeframes[] = {
+   PERIOD_M1, PERIOD_M2, PERIOD_M3, PERIOD_M4, PERIOD_M5,
+   PERIOD_M6, PERIOD_M10, PERIOD_M12, PERIOD_M15, PERIOD_M20, PERIOD_M30,
+   PERIOD_H1, PERIOD_H2, PERIOD_H3, PERIOD_H4, PERIOD_H6, PERIOD_H8, PERIOD_H12,
+   PERIOD_D1, PERIOD_W1, PERIOD_MN1
+};
+
+//+------------------------------------------------------------------+
+//| Lấy danh sách các timeframe CAO HƠN timeframe hiện tại           |
+//| Params:                                                          |
+//|   currentTF     - Timeframe hiện tại (0 = Period() của chart)    |
+//|   higherTFs[]   - Mảng output chứa các timeframe cao hơn         |
+//| Return: Số lượng timeframe cao hơn tìm được                      |
+//| Note: Mảng output được sắp xếp từ thấp đến cao                   |
+//+------------------------------------------------------------------+
+int GetHigherTimeframes(
+   ENUM_TIMEFRAMES currentTF,
+   ENUM_TIMEFRAMES &higherTFs[]
+)
+  {
+// Nếu truyền 0 hoặc PERIOD_CURRENT, lấy timeframe của chart
+   if(currentTF == 0 || currentTF == PERIOD_CURRENT)
+      currentTF = (ENUM_TIMEFRAMES)Period();
+
+// Lấy số giây của timeframe hiện tại
+   int currentSeconds = PeriodSeconds(currentTF);
+
+// Đếm số timeframe cao hơn
+   int count = 0;
+   int totalTFs = ArraySize(g_allTimeframes);
+
+   for(int i = 0; i < totalTFs; i++)
+     {
+      if(PeriodSeconds(g_allTimeframes[i]) > currentSeconds)
+         count++;
+     }
+
+   if(count == 0)
+     {
+      ArrayResize(higherTFs, 0);
+      return 0;
+     }
+
+// Resize và copy các timeframe cao hơn
+   ArrayResize(higherTFs, count);
+   int idx = 0;
+
+   for(int i = 0; i < totalTFs; i++)
+     {
+      if(PeriodSeconds(g_allTimeframes[i]) > currentSeconds)
+        {
+         higherTFs[idx] = g_allTimeframes[i];
+         idx++;
+        }
+     }
+
+   return count;
+  }
+
+//+------------------------------------------------------------------+
+//| Chuyển ENUM_TIMEFRAMES sang chuỗi hiển thị                       |
+//| Ví dụ: PERIOD_M5 -> "M5", PERIOD_H1 -> "H1"                      |
+//+------------------------------------------------------------------+
+string TimeframeToString(ENUM_TIMEFRAMES tf)
+  {
+   switch(tf)
+     {
+      case PERIOD_M1:  return "M1";
+      case PERIOD_M2:  return "M2";
+      case PERIOD_M3:  return "M3";
+      case PERIOD_M4:  return "M4";
+      case PERIOD_M5:  return "M5";
+      case PERIOD_M6:  return "M6";
+      case PERIOD_M10: return "M10";
+      case PERIOD_M12: return "M12";
+      case PERIOD_M15: return "M15";
+      case PERIOD_M20: return "M20";
+      case PERIOD_M30: return "M30";
+      case PERIOD_H1:  return "H1";
+      case PERIOD_H2:  return "H2";
+      case PERIOD_H3:  return "H3";
+      case PERIOD_H4:  return "H4";
+      case PERIOD_H6:  return "H6";
+      case PERIOD_H8:  return "H8";
+      case PERIOD_H12: return "H12";
+      case PERIOD_D1:  return "D1";
+      case PERIOD_W1:  return "W1";
+      case PERIOD_MN1: return "MN1";
+      default:         return EnumToString(tf);
+     }
+  }
+
+
 #endif // UTILITY_H
