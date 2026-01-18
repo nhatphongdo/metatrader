@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Build script for MetaTrader 5 EA and Indicator (Mac/Linux)
 #
@@ -103,6 +103,8 @@ find_metaeditor() {
 # Find Wine executable
 find_wine() {
     local wine_paths=(
+        "/Applications/MetaTrader 5.app/Contents/SharedSupport/wine/bin/wine64"
+        "/Applications/MetaTrader 5.app/Contents/SharedSupport/wine/bin/wine"
         "/usr/local/bin/wine64"
         "/usr/local/bin/wine"
         "/opt/homebrew/bin/wine64"
@@ -163,7 +165,12 @@ unix_to_wine_path() {
         if command -v winepath &> /dev/null; then
             winepath -w "$unix_path" 2>/dev/null || echo "$unix_path"
         else
-            echo "$unix_path"
+            # Manual fallback: map root / to Z:\ and replace slashes
+            if [[ "$unix_path" == /* ]]; then
+               echo "Z:${unix_path//\//\\}"
+            else
+               echo "$unix_path"
+            fi
         fi
     fi
 }
@@ -183,7 +190,13 @@ compile_mq5() {
     # Convert paths for Wine
     local wine_source=$(unix_to_wine_path "$source_file")
     local wine_log=$(unix_to_wine_path "$log_file")
-    local wine_include=$(unix_to_wine_path "$INCLUDE_DIR")
+
+    # Set WINEPREFIX based on MetaEditor location to avoid hang
+    # Assumes standard structure .../drive_c/Program Files/...
+    local wine_prefix=$(echo "$metaeditor" | sed 's|/drive_c/.*||')
+    if [[ -d "$wine_prefix" ]]; then
+        export WINEPREFIX="$wine_prefix"
+    fi
 
     # Run MetaEditor through Wine
     if [[ -n "$wine_cmd" ]]; then
@@ -197,7 +210,8 @@ compile_mq5() {
 
     # Check log for results
     if [[ -f "$log_file" ]]; then
-        local log_content=$(cat "$log_file" 2>/dev/null || iconv -f UTF-16LE -t UTF-8 "$log_file" 2>/dev/null || echo "")
+        # Try to convert UTF-16LE (MT5 standard) to UTF-8, fallback to cat if that fails
+        local log_content=$(iconv -f UTF-16LE -t UTF-8 "$log_file" 2>/dev/null || cat "$log_file" 2>/dev/null || echo "")
 
         local errors=$(echo "$log_content" | grep -oE '[0-9]+ error' | grep -oE '[0-9]+' | head -1 || echo "0")
         local warnings=$(echo "$log_content" | grep -oE '[0-9]+ warning' | grep -oE '[0-9]+' | head -1 || echo "0")
@@ -236,7 +250,7 @@ echo -e "${CYAN}========================================${NC}"
 echo ""
 
 # Find MetaEditor
-METAEDITOR=$(find_metaeditor)
+METAEDITOR=$(find_metaeditor || true)
 if [[ -z "$METAEDITOR" ]]; then
     echo -e "${RED}ERROR: MetaEditor64.exe not found!${NC}"
     echo -e "${YELLOW}Please install MetaTrader 5 or set METAEDITOR_PATH environment variable.${NC}"
@@ -252,7 +266,7 @@ fi
 echo -e "${GRAY}MetaEditor: $METAEDITOR${NC}"
 
 # Find Wine
-WINE_CMD=$(find_wine)
+WINE_CMD=$(find_wine || true)
 if [[ -z "$WINE_CMD" ]]; then
     echo -e "${YELLOW}WARNING: Wine not found. Attempting direct execution...${NC}"
 fi
