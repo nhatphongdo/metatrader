@@ -6,7 +6,7 @@
 #property indicator_chart_window
 #property indicator_plots 0
 
-#include <MA_Pullback_Inputs.mqh>
+#include "../include/MA_Pullback_Inputs.mqh"
 
 // ==================================================
 // ===================== INPUT =======================
@@ -15,6 +15,7 @@
 // --- TRADE LIMITS ---
 input double   InpMinStopLoss        = DEF_MIN_STOP_LOSS;           // Số points StopLoss tối thiểu
 input double   InpMaxRiskRewardRate  = DEF_MAX_RISK_REWARD_RATE;    // Tỷ lệ Reward / Risk tối đa
+input double   InpMinRiskRewardRate  = DEF_MIN_RISK_REWARD_RATE;    // Tỷ lệ Reward / Risk tối thiểu
 input double   InpSRBufferPercent    = DEF_SR_BUFFER_PERCENT;       // S/R/MA Buffer (%)
 
 // --- INDICATOR SETTINGS ---
@@ -183,6 +184,7 @@ int OnInit()
 // Core Settings
    g_config.minStopLoss = InpMinStopLoss;
    g_config.maxRiskRewardRate = InpMaxRiskRewardRate;
+   g_config.minRiskRewardRate = InpMinRiskRewardRate;
    g_config.srBufferPercent = InpSRBufferPercent;
    g_config.minScoreToPass = InpMinScoreToPass;
 // Indicator Parameters
@@ -543,7 +545,7 @@ int OnCalculate(
                     g_tickSize, g_pointValue, copyCount, scanResult);
 
       // Vẽ marker đánh dấu nến cắt SMA (chỉ khi không bị noise filter)
-      DrawCutCandleMarker(g_drawConfig, cutUpToBottom, time[cutIdx], cutUpToBottom ? low[cutIdx] : high[cutIdx], sma50[cutIdx], "");
+      DrawCutCandleMarker(g_drawConfig, cutUpToBottom, time[cutIdx], cutUpToBottom ? low[cutIdx] : high[cutIdx], sma50[cutIdx], "", g_pointValue);
 
       if(scanResult.found)
         {
@@ -555,7 +557,8 @@ int OnCalculate(
          g_nextAllowedCutIdx = scanResult.confirmIdx;
 
          // Alert / Push Notification nếu được bật
-         if(InpAlertEnabled || InpPushEnabled)
+         // Chỉ alert khi là tín hiệu mới (realtime), không alert khi mới load indicator
+         if((InpAlertEnabled || InpPushEnabled) && prev_calculated > 0)
            {
             string signalType = scanResult.isBuy ? "BUY" : "SELL";
             string alertMsg = StringFormat("%s - %s %s Tín hiệu @ %.5f | SL: %.5f | TP: %.5f | Điểm: %.1f",

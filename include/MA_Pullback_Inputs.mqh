@@ -184,15 +184,15 @@ enum ENUM_MA_TYPE_MODE
 // Số nến tối thiểu giữa 2 lần giá cắt MA, 0 = tắt
 #define DEF_MIN_CUT_INTERVAL          3
 // Trọng số cho Cut Interval
-#define DEF_CUT_INTERVAL_WEIGHT       5.0
+#define DEF_CUT_INTERVAL_WEIGHT       10.0
 // Số lần cắt MA tối đa trong lookback, 0 = tắt
 #define DEF_MAX_CUTS_IN_LOOKBACK      2
 // Số nến lookback để đếm số lần cắt MA
-#define DEF_CUTS_LOOKBACK_BARS        15
+#define DEF_CUTS_LOOKBACK_BARS        10
 // Trọng số cho Max Cuts
-#define DEF_MAX_CUTS_WEIGHT           5.0
+#define DEF_MAX_CUTS_WEIGHT           10.0
 // Khoảng cách tối thiểu từ peak giá đến MA (đơn vị: x ATR), 0 = tắt
-#define DEF_PEAK_MA_DIST_THRESHOLD    0
+#define DEF_PEAK_MA_DIST_THRESHOLD    0.25
 // Trọng số cho Peak-MA Distance
 #define DEF_PEAK_MA_DIST_WEIGHT       5.0
 
@@ -215,7 +215,7 @@ enum ENUM_MA_TYPE_MODE
 // --- FILTER 7: BODY/ATR RATIO ---
 // Kiểm tra nến confirm có đủ mạnh không (thân nến lớn so với ATR)
 // Bật/tắt filter
-#define DEF_ENABLE_BODY_ATR_FILTER      false
+#define DEF_ENABLE_BODY_ATR_FILTER      true
 // Nếu true, filter fail sẽ loại bỏ signal hoàn toàn
 #define DEF_BODY_ATR_CRITICAL           false
 // Tỷ lệ thân nến tối thiểu so với ATR (0.25 = 25% ATR)

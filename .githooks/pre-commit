@@ -1,0 +1,32 @@
+#!/bin/sh
+#
+# Pre-commit hook: Auto-build MQ5 files before commit
+# If build fails, commit is aborted.
+#
+
+echo "Running pre-commit build (clean)..."
+
+# Detect OS and run appropriate build script
+if [ -f "build.ps1" ]; then
+    if command -v pwsh &> /dev/null; then
+        pwsh -ExecutionPolicy Bypass -File build.ps1 -Clean
+    elif command -v powershell &> /dev/null; then
+        powershell -ExecutionPolicy Bypass -File build.ps1 -Clean
+    elif [ -f "build.sh" ]; then
+        ./build.sh -c
+    fi
+elif [ -f "build.sh" ]; then
+    ./build.sh -c
+fi
+
+BUILD_RESULT=$?
+
+if [ $BUILD_RESULT -ne 0 ]; then
+    echo ""
+    echo "Build FAILED! Commit aborted."
+    echo "Fix compilation errors before committing."
+    exit 1
+fi
+
+echo "Build successful. Proceeding with commit..."
+exit 0

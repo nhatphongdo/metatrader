@@ -529,10 +529,10 @@ void ScanForSignal(
    outResult.cancelReason = "";
 
 // Vùng sideway: giá dao động quanh SMA +/- 1 ATR
-   double atr = 0;
-   for(int j = cutIdx; j < cutIdx + config.atrLength && j < copyCount; j++)
-      atr += high[j] - low[j];
-   atr = atr / config.atrLength;
+   double emptyArr1[], emptyArr2[];
+   double atr = CalculateATR(high, low, emptyArr1, emptyArr2, cutIdx, config.atrLength, copyCount, ATR_HIGH_LOW);
+   if(atr <= 0)
+      atr = 0.0001; // Fallback để tránh chia 0
 
    double sidewayUpper = sma50[cutIdx] + atr * 2;
    double sidewayLower = sma50[cutIdx] - atr * 2;

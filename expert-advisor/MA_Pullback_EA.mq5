@@ -9,7 +9,7 @@
 #property strict
 
 #include <Trade\Trade.mqh>
-#include <MA_Pullback_Inputs.mqh>
+#include "../include/MA_Pullback_Inputs.mqh"
 
 // ==================================================
 // ===================== INPUT =======================
@@ -497,7 +497,7 @@ void OnTick()
    ArraySetAsSeries(close, true);
    ArraySetAsSeries(time, true);
 
-   int copyCount = MathMin(rates_total, 10000);
+   int copyCount = MathMin(rates_total, 1000); // EA realtime nên chỉ cần lấy 1000 nến trước đó để kiểm tra
    if(CopyOpen(_Symbol, _Period, 0, copyCount, open) <= 0)
       return;
    if(CopyHigh(_Symbol, _Period, 0, copyCount, high) <= 0)
@@ -574,7 +574,7 @@ void OnTick()
         {
          DrawCutCandleMarker(g_drawConfig, cutUpToBottom, time[cutIdx],
                              cutUpToBottom ? low[cutIdx] : high[cutIdx],
-                             sma50[cutIdx], "");
+                             sma50[cutIdx], "", g_pointValue);
         }
 
       // Scan for signal

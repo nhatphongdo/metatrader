@@ -239,13 +239,8 @@ ScoringFilterResult CheckMASlopeFilter(
      }
 
 // Tính ATR từ high/low để scale slope theo biến động thực tế
-   int atrBars = MathMin(config.atrLength, arraySize - confirmIdx - 1);  // ATR từ config
-   double atr = 0;
-   for(int i = 0; i < atrBars; i++)
-      atr += high[confirmIdx + i] - low[confirmIdx + i];
-   if(atrBars > 0)
-      atr = atr / atrBars;
-
+   double emptyArr1[], emptyArr2[];
+   double atr = CalculateATR(high, low, emptyArr1, emptyArr2, confirmIdx, config.atrLength, arraySize, ATR_HIGH_LOW);
    double atrPoints = atr / pointValue;  // Chuyển ATR sang points
 
 // Tính slope bằng Linear Regression
@@ -672,12 +667,8 @@ ScoringFilterResult CheckSRMinWidthFilter(
      }
 
 // Tính ATR
-   double atr = 0;
-   int atrBars = MathMin(config.atrLength, arraySize - confirmIdx - 1);
-   for(int i = 0; i < atrBars; i++)
-      atr += high[confirmIdx + i] - low[confirmIdx + i];
-   if(atrBars > 0)
-      atr = atr / atrBars;
+   double emptyArr1[], emptyArr2[];
+   double atr = CalculateATR(high, low, emptyArr1, emptyArr2, confirmIdx, config.atrLength, arraySize, ATR_HIGH_LOW);
 
    if(atr <= 0)
      {
@@ -792,12 +783,7 @@ ScoringFilterResult CheckBodyATRFilter(
    double body = MathAbs(close[confirmIdx] - open[confirmIdx]);
 
 // Tính ATR
-   double atr = 0;
-   int atrBars = MathMin(config.atrLength, arraySize - confirmIdx - 1);
-   for(int i = 0; i < atrBars; i++)
-      atr += high[confirmIdx + i] - low[confirmIdx + i];
-   if(atrBars > 0)
-      atr = atr / atrBars;
+   double atr = CalculateATR(high, low, open, close, confirmIdx, config.atrLength, arraySize, ATR_HIGH_LOW);
 
    if(atr <= 0)
      {
@@ -901,12 +887,8 @@ ScoringFilterResult CheckPriceMADistFilter(
      }
 
 // Tính ATR
-   double atr = 0;
-   int atrBars = MathMin(config.atrLength, arraySize - confirmIdx - 1);
-   for(int i = 0; i < atrBars; i++)
-      atr += high[confirmIdx + i] - low[confirmIdx + i];
-   if(atrBars > 0)
-      atr = atr / atrBars;
+   double emptyArr1[], emptyArr2[];
+   double atr = CalculateATR(high, low, emptyArr1, emptyArr2, confirmIdx, config.atrLength, arraySize, ATR_HIGH_LOW);
 
    if(atr <= 0)
      {

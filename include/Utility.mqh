@@ -587,15 +587,28 @@ void DrawCutCandleMarker(
    datetime cutTime,
    double   price,
    double   sma,
-   string   filterReason
+   string   filterReason,
+   double   pointValue = 0  // Để tính offset tránh overlap
 )
   {
    string id = config.objPrefix + "CUT_" + IntegerToString(cutTime);
    if(ObjectFind(0, id + "_DIA") >= 0)
       return;
 
+// Tính offset để tránh overlap với cancel marker
+// BUY: dịch xuống dưới, SELL: dịch lên trên
+   double offset = 0;
+   if(pointValue > 0)
+     {
+      offset = 50 * pointValue;  // 50 points offset
+      if(isBuy)
+         offset = -offset;  // BUY: dịch xuống (giá thấp hơn)
+      // SELL: giữ nguyên dương (giá cao hơn)
+     }
+   double markerPrice = price + offset;
+
 // Diamond marker để đánh dấu nến cắt SMA
-   ObjectCreate(0, id+"_DIA", OBJ_ARROW, 0, cutTime, price);
+   ObjectCreate(0, id+"_DIA", OBJ_ARROW, 0, cutTime, markerPrice);
    ObjectSetInteger(0, id+"_DIA", OBJPROP_ARROWCODE, filterReason == "" ? 117 : 78); // Diamond or skull (Wingdings)
 
    color markerColor;
@@ -621,6 +634,63 @@ void DrawCutCandleMarker(
 void DeleteAllSignalObjects(string objPrefix)
   {
    ObjectsDeleteAll(0, objPrefix);
+  }
+
+
+// ============================================================
+// =================== ATR CALCULATION ========================
+// ============================================================
+
+// Enum định nghĩa loại range để tính ATR
+enum ENUM_ATR_RANGE_TYPE
+  {
+   ATR_HIGH_LOW,      // High - Low (True Range truyền thống)
+   ATR_CLOSE_OPEN     // |Close - Open| (Body range)
+  };
+
+//+------------------------------------------------------------------+
+//| Tính Average True Range (ATR) linh hoạt                          |
+//| Params:                                                          |
+//|   high[]     - Mảng giá high                                     |
+//|   low[]      - Mảng giá low                                      |
+//|   open[]     - Mảng giá open (dùng cho ATR_CLOSE_OPEN)           |
+//|   close[]    - Mảng giá close (dùng cho ATR_CLOSE_OPEN)          |
+//|   startIdx   - Index bắt đầu tính (inclusive)                    |
+//|   atrLength  - Số nến để tính ATR                                |
+//|   arraySize  - Kích thước mảng                                   |
+//|   rangeType  - Loại range (ATR_HIGH_LOW hoặc ATR_CLOSE_OPEN)     |
+//| Return: Giá trị ATR, 0 nếu không đủ data                         |
+//+------------------------------------------------------------------+
+double CalculateATR(
+   const double &high[],
+   const double &low[],
+   const double &open[],
+   const double &close[],
+   int startIdx,
+   int atrLength,
+   int arraySize,
+   ENUM_ATR_RANGE_TYPE rangeType = ATR_HIGH_LOW
+)
+  {
+// Validate input
+   if(startIdx < 0 || atrLength <= 0)
+      return 0;
+
+   int atrBars = MathMin(atrLength, arraySize - startIdx - 1);
+   if(atrBars <= 0)
+      return 0;
+
+   double sum = 0;
+   for(int i = 0; i < atrBars; i++)
+     {
+      int idx = startIdx + i;
+      if(rangeType == ATR_HIGH_LOW)
+         sum += high[idx] - low[idx];
+      else  // ATR_CLOSE_OPEN
+         sum += MathAbs(close[idx] - open[idx]);
+     }
+
+   return sum / atrBars;
   }
 
 

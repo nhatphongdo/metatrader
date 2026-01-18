@@ -1,0 +1,9 @@
+# Compilation logs
+logs/
+
+# MetaTrader backup files
+*.bak
+
+# OS generated files
+.DS_Store
+Thumbs.db
