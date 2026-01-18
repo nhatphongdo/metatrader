@@ -308,10 +308,48 @@ if [[ "$INSTALL" == true && $TOTAL_ERRORS -eq 0 && $TOTAL_SUCCESS -gt 0 ]]; then
     echo ""
     echo -e "${YELLOW}[Installing to MetaTrader 5]${NC}"
 
-    # Get MT5 path from MetaEditor path
-    MT5_PATH=$(dirname "$METAEDITOR")
-    MT5_EXPERTS_DIR="$MT5_PATH/MQL5/Experts"
-    MT5_INDICATORS_DIR="$MT5_PATH/MQL5/Indicators"
+    # MT5 stores user data in Wine prefix AppData, not in Program Files
+    # Find the MQL5 folder in drive_c/users/.../AppData/Roaming/MetaQuotes/Terminal/<ID>/
+    MT5_DATA_PATH=""
+
+    # Get Wine prefix from MetaEditor path (find drive_c parent)
+    WINE_PREFIX=$(echo "$METAEDITOR" | sed 's|/drive_c/.*|/drive_c|')
+
+    if [[ -d "$WINE_PREFIX" ]]; then
+        # Search for MetaQuotes Terminal folder
+        TERMINAL_PATH="$WINE_PREFIX/users/$USER/AppData/Roaming/MetaQuotes/Terminal"
+        if [[ ! -d "$TERMINAL_PATH" ]]; then
+            # Try common Windows username patterns
+            TERMINAL_PATH=$(find "$WINE_PREFIX/users" -path "*/AppData/Roaming/MetaQuotes/Terminal" -type d 2>/dev/null | head -1)
+        fi
+
+        if [[ -d "$TERMINAL_PATH" ]]; then
+            # Find first terminal with MQL5 subdirectory
+            for terminal_dir in "$TERMINAL_PATH"/*/; do
+                if [[ -d "${terminal_dir}MQL5" ]]; then
+                    MT5_DATA_PATH="${terminal_dir}MQL5"
+                    break
+                fi
+            done
+        fi
+    fi
+
+    # Fallback: try same directory as MetaEditor
+    if [[ -z "$MT5_DATA_PATH" ]]; then
+        MT5_PATH=$(dirname "$METAEDITOR")
+        if [[ -d "$MT5_PATH/MQL5" ]]; then
+            MT5_DATA_PATH="$MT5_PATH/MQL5"
+        fi
+    fi
+
+    if [[ -z "$MT5_DATA_PATH" ]]; then
+        echo -e "  ${YELLOW}WARNING: MT5 data folder not found${NC}"
+        INSTALLED_COUNT=0
+    else
+        echo -e "  ${GRAY}MT5 Data: $MT5_DATA_PATH${NC}"
+        MT5_EXPERTS_DIR="$MT5_DATA_PATH/Experts"
+        MT5_INDICATORS_DIR="$MT5_DATA_PATH/Indicators"
+    fi
 
     INSTALLED_COUNT=0
 

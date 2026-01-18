@@ -156,9 +156,32 @@ function Compile-MQ5 {
 function Install-ToMT5 {
     param([string]$MT5Path, [string]$EABuildDir, [string]$IndicatorBuildDir)
 
-    $mt5DataPath = Join-Path $MT5Path "MQL5"
+    # MT5 stores user data in AppData, not Program Files
+    # Find the MQL5 folder in AppData\Roaming\MetaQuotes\Terminal\<ID>\
+    $mt5DataPath = $null
+    $terminalPath = "$env:APPDATA\MetaQuotes\Terminal"
+
+    if (Test-Path $terminalPath) {
+        # Find first terminal folder with MQL5 subdirectory
+        $terminals = Get-ChildItem -Path $terminalPath -Directory -ErrorAction SilentlyContinue
+        foreach ($terminal in $terminals) {
+            $mql5Path = Join-Path $terminal.FullName "MQL5"
+            if (Test-Path $mql5Path) {
+                $mt5DataPath = $mql5Path
+                break
+            }
+        }
+    }
+
+    if (-not $mt5DataPath) {
+        Write-Host "  WARNING: MT5 data folder not found in $terminalPath" -ForegroundColor Yellow
+        return 0
+    }
+
     $mt5ExpertsDir = Join-Path $mt5DataPath "Experts"
     $mt5IndicatorsDir = Join-Path $mt5DataPath "Indicators"
+
+    Write-Host "  MT5 Data: $mt5DataPath" -ForegroundColor Gray
 
     if (-not (Test-Path $mt5ExpertsDir)) {
         Write-Host "  WARNING: MT5 Experts folder not found: $mt5ExpertsDir" -ForegroundColor Yellow
@@ -172,36 +195,38 @@ function Install-ToMT5 {
     $installedCount = 0
 
     # Install EAs
-    Get-ChildItem -Path $EABuildDir -Filter "*.ex5" -ErrorAction SilentlyContinue | ForEach-Object {
-        $destPath = Join-Path $mt5ExpertsDir $_.Name
+    $eaFiles = Get-ChildItem -Path $EABuildDir -Filter "*.ex5" -ErrorAction SilentlyContinue
+    foreach ($file in $eaFiles) {
+        $destPath = Join-Path $mt5ExpertsDir $file.Name
         $shouldCopy = $true
         if (Test-Path $destPath) {
-            Write-Host "  File exists: $($_.Name)" -ForegroundColor Yellow
+            Write-Host "  File exists: $($file.Name)" -ForegroundColor Yellow
             $response = Read-Host "    Overwrite? (y/N)"
             $shouldCopy = ($response -eq 'y' -or $response -eq 'Y')
             if (-not $shouldCopy) { Write-Host "    Skipped." -ForegroundColor Gray }
         }
         if ($shouldCopy) {
-            Copy-Item $_.FullName $destPath -Force
-            Write-Host "  Installed EA: $($_.Name) -> $mt5ExpertsDir" -ForegroundColor Green
-            $script:installedCount++
+            Copy-Item $file.FullName $destPath -Force
+            Write-Host "  Installed EA: $($file.Name) -> $mt5ExpertsDir" -ForegroundColor Green
+            $installedCount++
         }
     }
 
     # Install Indicators
-    Get-ChildItem -Path $IndicatorBuildDir -Filter "*.ex5" -ErrorAction SilentlyContinue | ForEach-Object {
-        $destPath = Join-Path $mt5IndicatorsDir $_.Name
+    $indFiles = Get-ChildItem -Path $IndicatorBuildDir -Filter "*.ex5" -ErrorAction SilentlyContinue
+    foreach ($file in $indFiles) {
+        $destPath = Join-Path $mt5IndicatorsDir $file.Name
         $shouldCopy = $true
         if (Test-Path $destPath) {
-            Write-Host "  File exists: $($_.Name)" -ForegroundColor Yellow
+            Write-Host "  File exists: $($file.Name)" -ForegroundColor Yellow
             $response = Read-Host "    Overwrite? (y/N)"
             $shouldCopy = ($response -eq 'y' -or $response -eq 'Y')
             if (-not $shouldCopy) { Write-Host "    Skipped." -ForegroundColor Gray }
         }
         if ($shouldCopy) {
-            Copy-Item $_.FullName $destPath -Force
-            Write-Host "  Installed Indicator: $($_.Name) -> $mt5IndicatorsDir" -ForegroundColor Green
-            $script:installedCount++
+            Copy-Item $file.FullName $destPath -Force
+            Write-Host "  Installed Indicator: $($file.Name) -> $mt5IndicatorsDir" -ForegroundColor Green
+            $installedCount++
         }
     }
 
