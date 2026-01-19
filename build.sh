@@ -36,6 +36,7 @@ INDICATOR_BUILD_DIR="$BUILD_DIR/indicator"
 # Flags
 CLEAN=false
 INSTALL=false
+FORCE=false
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -48,11 +49,16 @@ while [[ $# -gt 0 ]]; do
             INSTALL=true
             shift
             ;;
+        --force|-f)
+            FORCE=true
+            shift
+            ;;
         --help|-h)
             echo "Usage: $0 [options]"
             echo "Options:"
             echo "  --clean, -c     Clean build directory before compiling"
             echo "  --install, -i   Copy built files to MetaTrader installation folder"
+            echo "  --force, -f     Force overwrite without confirmation"
             echo "  --help, -h      Show this help message"
             exit 0
             ;;
@@ -376,11 +382,15 @@ if [[ "$INSTALL" == true && $TOTAL_ERRORS -eq 0 && $TOTAL_SUCCESS -gt 0 ]]; then
                 should_copy=true
 
                 if [[ -f "$dest_path" ]]; then
-                    echo -e "  ${YELLOW}File exists: $file_name${NC}"
-                    read -p "    Overwrite? (y/N) " response
-                    if [[ "$response" != "y" && "$response" != "Y" ]]; then
-                        echo -e "    ${GRAY}Skipped.${NC}"
-                        should_copy=false
+                    if [[ "$FORCE" == true ]]; then
+                        echo -e "  ${YELLOW}Overwriting: $file_name${NC}"
+                    else
+                        echo -e "  ${YELLOW}File exists: $file_name${NC}"
+                        read -p "    Overwrite? (y/N) " response
+                        if [[ "$response" != "y" && "$response" != "Y" ]]; then
+                            echo -e "    ${GRAY}Skipped.${NC}"
+                            should_copy=false
+                        fi
                     fi
                 fi
 
@@ -404,11 +414,15 @@ if [[ "$INSTALL" == true && $TOTAL_ERRORS -eq 0 && $TOTAL_SUCCESS -gt 0 ]]; then
                 should_copy=true
 
                 if [[ -f "$dest_path" ]]; then
-                    echo -e "  ${YELLOW}File exists: $file_name${NC}"
-                    read -p "    Overwrite? (y/N) " response
-                    if [[ "$response" != "y" && "$response" != "Y" ]]; then
-                        echo -e "    ${GRAY}Skipped.${NC}"
-                        should_copy=false
+                    if [[ "$FORCE" == true ]]; then
+                        echo -e "  ${YELLOW}Overwriting: $file_name${NC}"
+                    else
+                        echo -e "  ${YELLOW}File exists: $file_name${NC}"
+                        read -p "    Overwrite? (y/N) " response
+                        if [[ "$response" != "y" && "$response" != "Y" ]]; then
+                            echo -e "    ${GRAY}Skipped.${NC}"
+                            should_copy=false
+                        fi
                     fi
                 fi
 

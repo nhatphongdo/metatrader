@@ -12,7 +12,8 @@
 param(
     [switch]$Clean,   # Clean build directory before compiling
     [switch]$Verbose, # Show detailed output
-    [switch]$Install  # Copy built files to MetaTrader installation folder
+    [switch]$Install, # Copy built files to MetaTrader installation folder
+    [switch]$Force    # Force overwrite without confirmation
 )
 
 $ErrorActionPreference = "Stop"
@@ -154,7 +155,7 @@ function Compile-MQ5 {
 }
 
 function Install-ToMT5 {
-    param([string]$MT5Path, [string]$EABuildDir, [string]$IndicatorBuildDir)
+    param([string]$MT5Path, [string]$EABuildDir, [string]$IndicatorBuildDir, [switch]$ForceOverwrite)
 
     # MT5 stores user data in AppData, not Program Files
     # Find the MQL5 folder in AppData\Roaming\MetaQuotes\Terminal\<ID>\
@@ -200,10 +201,14 @@ function Install-ToMT5 {
         $destPath = Join-Path $mt5ExpertsDir $file.Name
         $shouldCopy = $true
         if (Test-Path $destPath) {
-            Write-Host "  File exists: $($file.Name)" -ForegroundColor Yellow
-            $response = Read-Host "    Overwrite? (y/N)"
-            $shouldCopy = ($response -eq 'y' -or $response -eq 'Y')
-            if (-not $shouldCopy) { Write-Host "    Skipped." -ForegroundColor Gray }
+            if ($ForceOverwrite) {
+                Write-Host "  Overwriting: $($file.Name)" -ForegroundColor Yellow
+            } else {
+                Write-Host "  File exists: $($file.Name)" -ForegroundColor Yellow
+                $response = Read-Host "    Overwrite? (y/N)"
+                $shouldCopy = ($response -eq 'y' -or $response -eq 'Y')
+                if (-not $shouldCopy) { Write-Host "    Skipped." -ForegroundColor Gray }
+            }
         }
         if ($shouldCopy) {
             Copy-Item $file.FullName $destPath -Force
@@ -218,10 +223,14 @@ function Install-ToMT5 {
         $destPath = Join-Path $mt5IndicatorsDir $file.Name
         $shouldCopy = $true
         if (Test-Path $destPath) {
-            Write-Host "  File exists: $($file.Name)" -ForegroundColor Yellow
-            $response = Read-Host "    Overwrite? (y/N)"
-            $shouldCopy = ($response -eq 'y' -or $response -eq 'Y')
-            if (-not $shouldCopy) { Write-Host "    Skipped." -ForegroundColor Gray }
+            if ($ForceOverwrite) {
+                Write-Host "  Overwriting: $($file.Name)" -ForegroundColor Yellow
+            } else {
+                Write-Host "  File exists: $($file.Name)" -ForegroundColor Yellow
+                $response = Read-Host "    Overwrite? (y/N)"
+                $shouldCopy = ($response -eq 'y' -or $response -eq 'Y')
+                if (-not $shouldCopy) { Write-Host "    Skipped." -ForegroundColor Gray }
+            }
         }
         if ($shouldCopy) {
             Copy-Item $file.FullName $destPath -Force
@@ -291,7 +300,7 @@ if ($indicatorFiles) {
 if ($Install -and $totalErrors -eq 0 -and $totalSuccess -gt 0) {
     Write-Host ""
     Write-Host "[Installing to MetaTrader 5]" -ForegroundColor Yellow
-    $installedCount = Install-ToMT5 -MT5Path $MT5Path -EABuildDir $EABuildDir -IndicatorBuildDir $IndicatorBuildDir
+    $installedCount = Install-ToMT5 -MT5Path $MT5Path -EABuildDir $EABuildDir -IndicatorBuildDir $IndicatorBuildDir -ForceOverwrite:$Force
     Write-Host "  Total installed: $installedCount file(s)" -ForegroundColor Cyan
 }
 
