@@ -216,7 +216,7 @@ struct UnifiedScoringResult
 //+------------------------------------------------------------------+
 ScoringFilterResult CheckMASlopeFilter(const UnifiedScoringConfig& config, bool isBuySignal, int confirmIdx,
                                        const double& ma50[], const double& high[], const double& low[],
-                                       double pointValue, int arraySize)
+                                       const double& atr[], double pointValue, int arraySize)
 {
    ScoringFilterResult result;
    result.passed = false;
@@ -231,10 +231,8 @@ ScoringFilterResult CheckMASlopeFilter(const UnifiedScoringConfig& config, bool 
       return result;
    }
 
-   // Tính ATR từ high/low để scale slope theo biến động thực tế
-   double emptyArr1[], emptyArr2[];
-   double atr = CalculateATR(high, low, emptyArr1, emptyArr2, confirmIdx, config.atrLength, arraySize, ATR_HIGH_LOW);
-   double atrPoints = atr / pointValue;  // Chuyển ATR sang points
+   // Scale slope theo biến động thực tế ATR
+   double atrPoints = atr[confirmIdx] / pointValue;
 
    // Tính slope bằng Linear Regression
    int slopeBars = config.slopeSmoothBars;
@@ -597,8 +595,8 @@ ScoringFilterResult CheckSRZoneFilter(const UnifiedScoringConfig& config, bool i
 //| Vùng S/R quá hẹp = rủi ro cao, dễ bị SL                          |
 //+------------------------------------------------------------------+
 ScoringFilterResult CheckSRMinWidthFilter(const UnifiedScoringConfig& config, int confirmIdx, double support,
-                                          double resistance, const double& high[], const double& low[], int arraySize,
-                                          double& outSRRangeATR)
+                                          double resistance, const double& high[], const double& low[],
+                                          const double& atr[], int arraySize, double& outSRRangeATR)
 {
    ScoringFilterResult result;
    result.passed = false;
@@ -613,19 +611,9 @@ ScoringFilterResult CheckSRMinWidthFilter(const UnifiedScoringConfig& config, in
       return result;
    }
 
-   // Tính ATR
-   double emptyArr1[], emptyArr2[];
-   double atr = CalculateATR(high, low, emptyArr1, emptyArr2, confirmIdx, config.atrLength, arraySize, ATR_HIGH_LOW);
-
-   if (atr <= 0)
-   {
-      result.passed = true;
-      return result;
-   }
-
    // Tính độ rộng vùng S/R theo bội số ATR
    double srRange = resistance - support;
-   outSRRangeATR = srRange / atr;
+   outSRRangeATR = srRange / atr[confirmIdx];
    result.value = outSRRangeATR;
 
    // Kiểm tra >= ngưỡng
@@ -695,7 +683,8 @@ ScoringFilterResult CheckADXFilter(const UnifiedScoringConfig& config, bool isBu
 //| Kiểm tra body nến confirmation có đủ lớn không                   |
 //+------------------------------------------------------------------+
 ScoringFilterResult CheckBodyATRFilter(const UnifiedScoringConfig& config, int confirmIdx, const double& open[],
-                                       const double& close[], const double& high[], const double& low[], int arraySize)
+                                       const double& close[], const double& high[], const double& low[],
+                                       const double& atr[], int arraySize)
 {
    ScoringFilterResult result;
    result.passed = false;
@@ -712,16 +701,7 @@ ScoringFilterResult CheckBodyATRFilter(const UnifiedScoringConfig& config, int c
    // Tính body size
    double body = MathAbs(close[confirmIdx] - open[confirmIdx]);
 
-   // Tính ATR
-   double atr = CalculateATR(high, low, open, close, confirmIdx, config.atrLength, arraySize, ATR_HIGH_LOW);
-
-   if (atr <= 0)
-   {
-      result.passed = true;
-      return result;
-   }
-
-   result.value = body / atr;
+   result.value = body / atr[confirmIdx];
 
    if (result.value >= config.minBodyATRRatio)
    {
@@ -789,7 +769,8 @@ ScoringFilterResult CheckVolumeFilter(const UnifiedScoringConfig& config, int co
 //| Kiểm tra giá có quá xa MA không (tránh chase)                    |
 //+------------------------------------------------------------------+
 ScoringFilterResult CheckPriceMADistFilter(const UnifiedScoringConfig& config, int confirmIdx, const double& close[],
-                                           const double& high[], const double& low[], const double& ma[], int arraySize)
+                                           const double& high[], const double& low[], const double& ma[],
+                                           const double& atr[], int arraySize)
 {
    ScoringFilterResult result;
    result.passed = false;
@@ -803,19 +784,9 @@ ScoringFilterResult CheckPriceMADistFilter(const UnifiedScoringConfig& config, i
       return result;
    }
 
-   // Tính ATR
-   double emptyArr1[], emptyArr2[];
-   double atr = CalculateATR(high, low, emptyArr1, emptyArr2, confirmIdx, config.atrLength, arraySize, ATR_HIGH_LOW);
-
-   if (atr <= 0)
-   {
-      result.passed = true;
-      return result;
-   }
-
    // Tính khoảng cách giá-MA theo bội số ATR
    double distance = MathAbs(close[confirmIdx] - ma[confirmIdx]);
-   result.value = distance / atr;
+   result.value = distance / atr[confirmIdx];
 
    if (result.value <= config.maxPriceMADistATR)
    {
@@ -955,7 +926,8 @@ void RunUnifiedScoringFilters(const UnifiedScoringConfig& config, bool isBuySign
                               const double& close[], const double& ma50[], const double& sma200[], const double& rsi[],
                               const double& macdMain[], const double& macdSignal[], const long& volume[],
                               const double& adxMain[], const double& adxPlusDI[], const double& adxMinusDI[],
-                              double tickSize, double pointValue, int arraySize, UnifiedScoringResult& outResult)
+                              const double& atr[], double tickSize, double pointValue, int arraySize,
+                              UnifiedScoringResult& outResult)
 {
    // Khởi tạo kết quả
    outResult.successScore = 0;
@@ -973,7 +945,7 @@ void RunUnifiedScoringFilters(const UnifiedScoringConfig& config, bool isBuySign
    // -----------------------------------------------------------------
    // FILTER 1: MA SLOPE
    // -----------------------------------------------------------------
-   filterResult = CheckMASlopeFilter(config, isBuySignal, confirmIdx, ma50, high, low, pointValue, arraySize);
+   filterResult = CheckMASlopeFilter(config, isBuySignal, confirmIdx, ma50, high, low, atr, pointValue, arraySize);
    if (filterResult.passed)
       outResult.successScore += config.maSlopeWeight;
    else
@@ -1101,7 +1073,7 @@ void RunUnifiedScoringFilters(const UnifiedScoringConfig& config, bool isBuySign
    // FILTER 4B: S/R MIN WIDTH (lọc vùng S/R quá hẹp)
    // -----------------------------------------------------------------
    double srRangeATR = 0;
-   filterResult = CheckSRMinWidthFilter(config, confirmIdx, support, resistance, high, low, arraySize, srRangeATR);
+   filterResult = CheckSRMinWidthFilter(config, confirmIdx, support, resistance, high, low, atr, arraySize, srRangeATR);
    if (filterResult.passed)
       outResult.successScore += config.srMinWidthWeight;
    else
@@ -1139,7 +1111,7 @@ void RunUnifiedScoringFilters(const UnifiedScoringConfig& config, bool isBuySign
    // -----------------------------------------------------------------
    // FILTER 6: BODY/ATR RATIO
    // -----------------------------------------------------------------
-   filterResult = CheckBodyATRFilter(config, confirmIdx, open, close, high, low, arraySize);
+   filterResult = CheckBodyATRFilter(config, confirmIdx, open, close, high, low, atr, arraySize);
    if (filterResult.passed)
       outResult.successScore += config.bodyATRWeight;
    else
@@ -1177,7 +1149,7 @@ void RunUnifiedScoringFilters(const UnifiedScoringConfig& config, bool isBuySign
    // -----------------------------------------------------------------
    // FILTER 8: PRICE-MA DISTANCE
    // -----------------------------------------------------------------
-   filterResult = CheckPriceMADistFilter(config, confirmIdx, close, high, low, ma50, arraySize);
+   filterResult = CheckPriceMADistFilter(config, confirmIdx, close, high, low, ma50, atr, arraySize);
    if (filterResult.passed)
       outResult.successScore += config.priceMADistWeight;
    else

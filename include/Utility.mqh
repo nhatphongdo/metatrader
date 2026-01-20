@@ -522,8 +522,14 @@ string DrawSignalMarker(const SignalDrawConfig& config, bool isBuy, bool isCance
    int tpPoints = (int)(MathAbs(tpPrice - entryPrice) / pointValue);
 
    // Tạo tooltip text (hiển thị khi hover)
-   string tooltipText = StringFormat("%s %s (Điểm: %.1f)\nVào: %.5f\nSL: %d pts (%.5f)\nTP: %d pts (%.5f)", signalType,
-                                     strengthText, score, entryPrice, slPoints, slPrice, tpPoints, tpPrice);
+   string tooltipText = StringFormat("%s %s (Điểm: %.1f)", signalType, strengthText, score);
+
+   if (!isCanceled)
+   {
+      tooltipText += StringFormat("\nVào: %.5f\nSL: %d pts (%.5f)\nTP: %d pts (%.5f)", entryPrice, slPoints, slPrice,
+                                  tpPoints, tpPrice);
+   }
+
    if (reasons != "")
       tooltipText += "\nCảnh báo:\n" + reasons;
 
@@ -617,7 +623,7 @@ void DrawCutCandleMarker(const SignalDrawConfig& config, bool isBuy, datetime cu
    double offset = 0;
    if (pointValue > 0)
    {
-      offset = 50 * pointValue;  // 50 points offset
+      offset = 10 * pointValue;  // 10 points offset
       if (isBuy)
          offset = -offset;  // BUY: dịch xuống (giá thấp hơn)
                             // SELL: giữ nguyên dương (giá cao hơn)

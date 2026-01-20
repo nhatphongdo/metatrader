@@ -13,12 +13,14 @@
 // ==================================================
 
 // --- TRADE LIMITS ---
+input group "=== Cấu hình Giới hạn Trade ===";
 input double InpMinStopLoss = DEF_MIN_STOP_LOSS;               // Số points StopLoss tối thiểu
 input double InpMaxRiskRewardRate = DEF_MAX_RISK_REWARD_RATE;  // Tỷ lệ Reward / Risk tối đa
 input double InpMinRiskRewardRate = DEF_MIN_RISK_REWARD_RATE;  // Tỷ lệ Reward / Risk tối thiểu
 input double InpSRBufferPercent = DEF_SR_BUFFER_PERCENT;       // S/R/MA Buffer (%)
 
 // --- INDICATOR SETTINGS ---
+input group "=== Cấu hình Chỉ báo ===";
 input ENUM_MA_TYPE_MODE InpMAType = DEF_MA_TYPE;  // Loại Moving Average
 input int InpMA50Period = DEF_MA50_PERIOD;        // Chu kỳ MA Fast
 input int InpMA200Period = DEF_MA200_PERIOD;      // Chu kỳ MA Slow
@@ -26,18 +28,21 @@ input int InpRSIPeriod = DEF_RSI_PERIOD;          // Chu kỳ RSI
 input int InpMACDFast = DEF_MACD_FAST;            // Chu kỳ MACD Fast
 input int InpMACDSlow = DEF_MACD_SLOW;            // Chu kỳ MACD Slow
 input int InpMACDSignal = DEF_MACD_SIGNAL;        // Chu kỳ MACD Signal
+input int InpATRLength = DEF_ATR_LENGTH;          // Số nến tính ATR
 
 // --- STRATEGY SETTINGS ---
+input group "=== Cấu hình Chiến lược ===";
 input int InpMaxWaitBars = DEF_MAX_WAIT_BARS;         // Số nến tối đa chờ pullback
-input int InpATRLength = DEF_ATR_LENGTH;              // Số nến tính ATR
 input double InpWickBodyRatio = DEF_WICK_BODY_RATIO;  // Tỷ lệ Bóng/Thân nến
 
 // ==================================================
 // ============== FILTER SETTINGS ===================
 // ==================================================
+input group "=== Cấu hình Bộ lọc ===";
 input double InpMinScoreToPass = DEF_MIN_SCORE_TO_PASS;  // Điểm Threshold để Valid
 
 // FILTER 1: MA SLOPE
+input group "=== Cấu hình Bộ lọc 1: Độ dốc đường MA ===";
 input bool InpEnableMASlopeFilter = DEF_ENABLE_MA_SLOPE;        // [MA Slope] Bật
 input bool InpMASlopeCritical = DEF_MA_SLOPE_CRITICAL;          // [MA Slope] Critical
 input double InpMA50SlopeThreshold = DEF_MA50_SLOPE_THRESHOLD;  // [MA Slope] Threshold (độ)
@@ -45,28 +50,33 @@ input int InpSlopeSmoothBars = DEF_SLOPE_SMOOTH_BARS;           // [MA Slope] S�
 input double InpMASlopeWeight = DEF_MA_SLOPE_WEIGHT;            // [MA Slope] Weight
 
 // FILTER 2A: STATIC MOMENTUM
+input group "=== Cấu hình Bộ lọc 2A: Động lượng ===";
 input bool InpEnableStaticMomentum = DEF_ENABLE_STATIC_MOMENTUM;      // [Static Momentum] Bật
 input bool InpStaticMomentumCritical = DEF_STATIC_MOMENTUM_CRITICAL;  // [Static Momentum] Critical
 input double InpStaticMomentumWeight = DEF_STATIC_MOMENTUM_WEIGHT;    // [Static Momentum] Weight
 
 // FILTER 2B: RSI REVERSAL
-input bool InpEnableRSIReversal = DEF_ENABLE_RSI_REVERSAL;      // [RSI Reversal] Bật
-input bool InpRSIReversalCritical = DEF_RSI_REVERSAL_CRITICAL;  // [RSI Reversal] Critical
-input int InpRSIReversalLookback = DEF_RSI_REVERSAL_LOOKBACK;   // [RSI Reversal] Lookback
-input double InpRSIReversalWeight = DEF_RSI_REVERSAL_WEIGHT;    // [RSI Reversal] Weight
+input group "=== Cấu hình Bộ lọc 2B: Đảo chiều RSI ===";
+bool InpEnableRSIReversal = DEF_ENABLE_RSI_REVERSAL;      // [RSI Reversal] Bật
+bool InpRSIReversalCritical = DEF_RSI_REVERSAL_CRITICAL;  // [RSI Reversal] Critical
+int InpRSIReversalLookback = DEF_RSI_REVERSAL_LOOKBACK;   // [RSI Reversal] Lookback
+double InpRSIReversalWeight = DEF_RSI_REVERSAL_WEIGHT;    // [RSI Reversal] Weight
 
 // FILTER 2C: MACD HISTOGRAM
+input group "=== Cấu hình Bộ lọc 2C: MACD Histogram ===";
 input bool InpEnableMACDHistogram = DEF_ENABLE_MACD_HISTOGRAM;      // [MACD Histogram] Bật
 input bool InpMACDHistogramCritical = DEF_MACD_HISTOGRAM_CRITICAL;  // [MACD Histogram] Critical
 input int InpMACDHistogramLookback = DEF_MACD_HISTOGRAM_LOOKBACK;   // [MACD Histogram] Lookback
 input double InpMACDHistogramWeight = DEF_MACD_HISTOGRAM_WEIGHT;    // [MACD Histogram] Weight
 
 // FILTER 3: SMA200 TREND
+input group "=== Cấu hình Bộ lọc 3: Xu hướng MA dài hạn (vd: MA200) ===";
 input bool InpEnableSMA200Filter = DEF_ENABLE_SMA200_FILTER;  // [SMA200 Trend] Bật
 input bool InpSMA200Critical = DEF_SMA200_CRITICAL;           // [SMA200 Trend] Critical
 input double InpSMA200Weight = DEF_SMA200_WEIGHT;             // [SMA200 Trend] Weight
 
-// FILTER 4: S/R ZONE
+// FILTER 4A: S/R ZONE
+input group "=== Cấu hình Bộ lọc 4A: Vùng S/R ===";
 input bool InpEnableSRZoneFilter = DEF_ENABLE_SR_ZONE_FILTER;  // [S/R Zone] Bật
 input bool InpSRZoneCritical = DEF_SR_ZONE_CRITICAL;           // [S/R Zone] Critical
 input int InpSRLookback = DEF_SR_LOOKBACK;                     // [S/R Zone] Lookback Bars
@@ -74,12 +84,14 @@ input double InpSRZonePercent = DEF_SR_ZONE_PERCENT;           // [S/R Zone] % Z
 input double InpSRZoneWeight = DEF_SR_ZONE_WEIGHT;             // [S/R Zone] Weight
 
 // FILTER 4B: S/R MIN WIDTH
-input bool InpEnableSRMinWidthFilter = DEF_ENABLE_SR_MIN_WIDTH;  // [S/R Min Width] Bật
-input bool InpSRMinWidthCritical = DEF_SR_MIN_WIDTH_CRITICAL;    // [S/R Min Width] Critical
-input double InpMinSRWidthATR = DEF_MIN_SR_WIDTH_ATR;            // [S/R Min Width] Độ rộng tối thiểu (xATR)
-input double InpSRMinWidthWeight = DEF_SR_MIN_WIDTH_WEIGHT;      // [S/R Min Width] Weight
+input group "=== Cấu hình Bộ lọc 4B: Độ rộng tối thiểu vùng S/R ===";
+bool InpEnableSRMinWidthFilter = DEF_ENABLE_SR_MIN_WIDTH;  // [S/R Min Width] Bật
+bool InpSRMinWidthCritical = DEF_SR_MIN_WIDTH_CRITICAL;    // [S/R Min Width] Critical
+double InpMinSRWidthATR = DEF_MIN_SR_WIDTH_ATR;            // [S/R Min Width] Độ rộng tối thiểu (xATR)
+double InpSRMinWidthWeight = DEF_SR_MIN_WIDTH_WEIGHT;      // [S/R Min Width] Weight
 
 // FILTER 5: MA NOISE
+input group "=== Cấu hình Bộ lọc 5: Nhiễu MA (giao cắt liên tục) ===";
 input int InpMinCutInterval = DEF_MIN_CUT_INTERVAL;                    // [MA Noise] Min Cut Interval
 input double InpCutIntervalWeight = DEF_CUT_INTERVAL_WEIGHT;           // [MA Noise] Cut Interval Weight
 input int InpMaxCutsInLookback = DEF_MAX_CUTS_IN_LOOKBACK;             // [MA Noise] Max Cuts in Lookback
@@ -89,6 +101,7 @@ input double InpPeakMADistanceThreshold = DEF_PEAK_MA_DIST_THRESHOLD;  // [MA No
 input double InpPeakMADistWeight = DEF_PEAK_MA_DIST_WEIGHT;            // [MA Noise] Peak-MA Weight
 
 // FILTER 6: ADX TREND STRENGTH
+input group "=== Cấu hình Bộ lọc 6: Cường độ xu hướng ADX ===";
 input bool InpEnableADXFilter = DEF_ENABLE_ADX_FILTER;              // [ADX] Bật
 input bool InpADXCritical = DEF_ADX_CRITICAL;                       // [ADX] Critical
 input int InpADXPeriod = DEF_ADX_PERIOD;                            // [ADX] Chu kỳ
@@ -97,19 +110,22 @@ input bool InpADXDirectionalConfirm = DEF_ADX_DIRECTIONAL_CONFIRM;  // [ADX] Che
 input double InpADXWeight = DEF_ADX_WEIGHT;                         // [ADX] Weight
 
 // FILTER 7: BODY/ATR RATIO
+input group "=== Cấu hình Bộ lọc 7: Tỷ lệ thân nến/ATR ===";
 input bool InpEnableBodyATRFilter = DEF_ENABLE_BODY_ATR_FILTER;  // [Body/ATR] Bật
 input bool InpBodyATRCritical = DEF_BODY_ATR_CRITICAL;           // [Body/ATR] Critical
 input double InpMinBodyATRRatio = DEF_MIN_BODY_ATR_RATIO;        // [Body/ATR] Min Ratio
 input double InpBodyATRWeight = DEF_BODY_ATR_WEIGHT;             // [Body/ATR] Weight
 
 // FILTER 8: VOLUME CONFIRMATION
-input bool InpEnableVolumeFilter = DEF_ENABLE_VOLUME_FILTER;  // [Volume] Bật
-input bool InpVolumeCritical = DEF_VOLUME_CRITICAL;           // [Volume] Critical
-input int InpVolumeAvgPeriod = DEF_VOLUME_AVG_PERIOD;         // [Volume] Avg Period
-input double InpMinVolumeRatio = DEF_MIN_VOLUME_RATIO;        // [Volume] Min Ratio
-input double InpVolumeWeight = DEF_VOLUME_WEIGHT;             // [Volume] Weight
+input group "=== Cấu hình Bộ lọc 8: Xác nhận volume (tắt)===";
+bool InpEnableVolumeFilter = DEF_ENABLE_VOLUME_FILTER;  // [Volume] Bật
+bool InpVolumeCritical = DEF_VOLUME_CRITICAL;           // [Volume] Critical
+int InpVolumeAvgPeriod = DEF_VOLUME_AVG_PERIOD;         // [Volume] Avg Period
+double InpMinVolumeRatio = DEF_MIN_VOLUME_RATIO;        // [Volume] Min Ratio
+double InpVolumeWeight = DEF_VOLUME_WEIGHT;             // [Volume] Weight
 
 // FILTER 9: PRICE-MA DISTANCE
+input group "=== Cấu hình Bộ lọc 9: Khoảng cách giá/MA ===";
 input bool InpEnablePriceMADistFilter = DEF_ENABLE_PRICE_MA_DIST;  // [Price-MA] Bật
 input bool InpPriceMADistCritical = DEF_PRICE_MA_DIST_CRITICAL;    // [Price-MA] Critical
 input double InpMaxPriceMADistATR = DEF_MAX_PRICE_MA_DIST_ATR;     // [Price-MA] Max Distance (xATR)
@@ -119,6 +135,7 @@ input double InpPriceMAWeight = DEF_PRICE_MA_DIST_WEIGHT;          // [Price-MA]
 // ==================================================
 
 // --- COLORS ---
+input group "=== Cấu hình Màu sắc tín hiệu ===";
 input color InpBuyColor = DEF_BUY_COLOR;          // Màu tín hiệu BUY
 input color InpSellColor = DEF_SELL_COLOR;        // Màu tín hiệu SELL
 input color InpSLColor = DEF_SL_COLOR;            // Màu đường Stoploss
@@ -130,11 +147,18 @@ input color InpResistColor = DEF_RESIST_COLOR;    // Màu vùng Resistance
 input color InpCancelColor = DEF_CANCEL_COLOR;    // Màu tín hiệu bị hủy
 
 // --- ALERTS ---
+input group "=== Cấu hình Thông báo ===";
 input bool InpAlertEnabled = DEF_ALERT_ENABLED;  // Bật/tắt Alert popup
 input bool InpPushEnabled = DEF_PUSH_ENABLED;    // Bật/tắt Push Notification
 
 // --- AUTO SETUP ---
-input bool InpAutoAddIndicators = true;  // Tự động thêm SMA/RSI/MACD lên chart
+input group "=== Cấu hình Hiển thị chỉ báo tự động ===";
+input bool InpAutoAddIndicators = true;       // Tự động thêm SMA/RSI/MACD lên chart
+input color InpMAFastColor = clrSalmon;       // Màu đường MA nhanh
+input color InpMASlowColor = clrDeepSkyBlue;  // Màu đường MA chậm
+input color InpRSIColor = clrDodgerBlue;      // Màu đường RSI
+input color InpMACDMainColor = clrSilver;     // Màu đường MACD chính
+input color InpMACDSignalColor = clrYellow;   // Màu đường MACD tín hiệu
 
 // ==================================================
 // ================= BIẾN TOÀN CỤC ===================
@@ -147,6 +171,7 @@ int hSMA200;
 int hRSI;
 int hMACD;
 int hADX;
+int hATR;
 int g_nextAllowedCutIdx = -1;
 double g_tickSize;
 double g_pointValue;
@@ -177,6 +202,11 @@ int OnInit()
    // ADX indicator for trend strength filter
    hADX = iADX(_Symbol, _Period, InpADXPeriod);
    if (hADX == INVALID_HANDLE)
+      return INIT_FAILED;
+
+   // ATR indicator
+   hATR = iATR(_Symbol, _Period, InpATRLength);
+   if (hATR == INVALID_HANDLE)
       return INIT_FAILED;
 
    // --- CONFIG INITIALIZATION ---
@@ -304,6 +334,7 @@ void OnDeinit(const int reason)
    IndicatorRelease(hRSI);
    IndicatorRelease(hMACD);
    IndicatorRelease(hADX);
+   IndicatorRelease(hATR);
 
    // Xóa chart indicators nếu đã thêm
    RemoveIndicatorsFromChart();
@@ -329,21 +360,23 @@ void AddIndicatorsToChart()
    long chartId = ChartID();
    string indName = "";
 
-   // Thêm SMA 50
+   // Thêm MA 50
    if (hSMA50 != INVALID_HANDLE)
    {
       if (IndicatorExists(chartId, "MA(" + IntegerToString(InpMA50Period) + ")", indName) == -1)
       {
+         PlotIndexSetInteger(hSMA50, 0, PLOT_LINE_COLOR, InpMAFastColor);
          if (!ChartIndicatorAdd(chartId, 0, hSMA50))
             Print("Lỗi thêm SMA50");
       }
    }
 
-   // Thêm SMA 200
+   // Thêm MA 200
    if (hSMA200 != INVALID_HANDLE)
    {
       if (IndicatorExists(chartId, "MA(" + IntegerToString(InpMA200Period) + ")", indName) == -1)
       {
+         PlotIndexSetInteger(hSMA200, 0, PLOT_LINE_COLOR, InpMASlowColor);
          if (!ChartIndicatorAdd(chartId, 0, hSMA200))
             Print("Lỗi thêm SMA200");
       }
@@ -354,6 +387,7 @@ void AddIndicatorsToChart()
    {
       if (IndicatorExists(chartId, "RSI(" + IntegerToString(InpRSIPeriod) + ")", indName) == -1)
       {
+         PlotIndexSetInteger(hRSI, 0, PLOT_LINE_COLOR, InpRSIColor);
          int rsiWindow = (int)ChartGetInteger(chartId, CHART_WINDOWS_TOTAL);
          if (!ChartIndicatorAdd(chartId, rsiWindow, hRSI))
             Print("Lỗi thêm RSI");
@@ -365,6 +399,9 @@ void AddIndicatorsToChart()
    {
       if (IndicatorExists(chartId, "MACD", indName) == -1)
       {
+         PlotIndexSetInteger(hMACD, 0, PLOT_LINE_COLOR, InpMACDMainColor);
+         PlotIndexSetInteger(hMACD, 1, PLOT_LINE_COLOR, InpMACDSignalColor);
+         PlotIndexSetInteger(hMACD, 1, PLOT_LINE_WIDTH, 2);
          int macdWindow = (int)ChartGetInteger(chartId, CHART_WINDOWS_TOTAL);
          if (!ChartIndicatorAdd(chartId, macdWindow, hMACD))
             Print("Lỗi thêm MACD");
@@ -482,6 +519,12 @@ int OnCalculate(const int rates_total, const int prev_calculated, const datetime
    if (CopyBuffer(hADX, 2, 0, copyCount, adxMinusDI) <= 0)  // -DI
       return rates_total;
 
+   // Copy ATR buffers
+   double atr[];
+   ArraySetAsSeries(atr, true);
+   if (CopyBuffer(hATR, 0, 0, copyCount, atr) <= 0)
+      return rates_total;
+
    // Copy tick volume to series array
    long volumeAsSeries[];
    ArraySetAsSeries(volumeAsSeries, true);
@@ -531,7 +574,7 @@ int OnCalculate(const int rates_total, const int prev_calculated, const datetime
       // Sử dụng ScanForSignal từ shared library
       ScanResult scanResult;
       ScanForSignal(g_config, cutIdx, cutUpToBottom, _Symbol, time[0], open, high, low, close, sma50, sma200, rsi,
-                    macdMain, macdSignal, volumeAsSeries, adxMain, adxPlusDI, adxMinusDI, g_tickSize, g_pointValue,
+                    macdMain, macdSignal, volumeAsSeries, adxMain, adxPlusDI, adxMinusDI, atr, g_tickSize, g_pointValue,
                     copyCount, scanResult);
 
       // Vẽ marker đánh dấu nến cắt SMA (chỉ khi không bị noise filter)

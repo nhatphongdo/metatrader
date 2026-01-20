@@ -218,8 +218,8 @@ void ProcessSignal(const SMAPullbackConfig& config, bool isBuySignal, int cutIdx
                    datetime currentTime, const double& open[], const double& high[], const double& low[],
                    const double& close[], const double& sma50[], const double& sma200[], const double& rsi[],
                    const double& macdMain[], const double& macdSignal[], const long& volume[], const double& adxMain[],
-                   const double& adxPlusDI[], const double& adxMinusDI[], double tickSize, double pointValue,
-                   SignalResult& outResult)
+                   const double& adxPlusDI[], const double& adxMinusDI[], const double& atr[], double tickSize,
+                   double pointValue, SignalResult& outResult)
 {
    outResult.score = 100;  // Bắt đầu với 100, sẽ trừ dần bằng failScore
    outResult.reasons = "";
@@ -334,7 +334,7 @@ void ProcessSignal(const SMAPullbackConfig& config, bool isBuySignal, int cutIdx
 
    UnifiedScoringResult scoringResult;
    RunUnifiedScoringFilters(uniConfig, isBuySignal, confirmIdx, symbol, currentTime, open, high, low, close, sma50,
-                            sma200, rsi, macdMain, macdSignal, volume, adxMain, adxPlusDI, adxMinusDI, tickSize,
+                            sma200, rsi, macdMain, macdSignal, volume, adxMain, adxPlusDI, adxMinusDI, atr, tickSize,
                             pointValue, ArraySize(high), scoringResult);
 
    totalFailScore += scoringResult.failScore;  // Gộp failScore từ Unified filters
@@ -477,8 +477,8 @@ void ScanForSignal(const SMAPullbackConfig& config, int cutIdx,
                    string symbol, datetime currentTime, const double& open[], const double& high[], const double& low[],
                    const double& close[], const double& sma50[], const double& sma200[], const double& rsi[],
                    const double& macdMain[], const double& macdSignal[], const long& volume[], const double& adxMain[],
-                   const double& adxPlusDI[], const double& adxMinusDI[], double tickSize, double pointValue,
-                   int copyCount, ScanResult& outResult)
+                   const double& adxPlusDI[], const double& adxMinusDI[], const double& atr[], double tickSize,
+                   double pointValue, int copyCount, ScanResult& outResult)
 {
    outResult.found = false;
    outResult.cancelled = false;
@@ -486,14 +486,8 @@ void ScanForSignal(const SMAPullbackConfig& config, int cutIdx,
    outResult.isBuy = cutUpToBottom;
    outResult.cancelReason = "";
 
-   // Vùng sideway: giá dao động quanh SMA +/- 1 ATR
-   double emptyArr1[], emptyArr2[];
-   double atr = CalculateATR(high, low, emptyArr1, emptyArr2, cutIdx, config.atrLength, copyCount, ATR_HIGH_LOW);
-   if (atr <= 0)
-      atr = 0.0001;  // Fallback để tránh chia 0
-
-   double sidewayUpper = sma50[cutIdx] + atr * 2;
-   double sidewayLower = sma50[cutIdx] - atr * 2;
+   double sidewayUpper = sma50[cutIdx] + atr[cutIdx] * 2;
+   double sidewayLower = sma50[cutIdx] - atr[cutIdx] * 2;
 
    // Scan các nến sau nến cắt (Tương lai = index nhỏ hơn)
    // Từ cutIdx-1 lùi về cutIdx - WaitBars
@@ -561,7 +555,8 @@ void ScanForSignal(const SMAPullbackConfig& config, int cutIdx,
          // Tiến hành kiểm tra điều kiện signal
          SignalResult result;
          ProcessSignal(config, cutUpToBottom, cutIdx, k, symbol, currentTime, open, high, low, close, sma50, sma200,
-                       rsi, macdMain, macdSignal, volume, adxMain, adxPlusDI, adxMinusDI, tickSize, pointValue, result);
+                       rsi, macdMain, macdSignal, volume, adxMain, adxPlusDI, adxMinusDI, atr, tickSize, pointValue,
+                       result);
 
          if (!result.isCriticalFail)
          {
