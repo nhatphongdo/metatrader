@@ -31,14 +31,14 @@ enum ENUM_MA_TYPE_MODE
 #define DEF_AUTO_TRADE true
 // Khối lượng giao dịch (lots)
 #define DEF_LOT_SIZE 1.0
-// Số tiền thua tối đa mỗi lệnh (USD), 0 = không giới hạn
-#define DEF_MAX_LOSS 100.0
+// Số tiền thua tối đa mỗi lệnh (% tài khoản), 0 = không giới hạn
+#define DEF_MAX_LOSS_PERCENT 1.0
 // Số định danh EA
 #define DEF_MAGIC_NUMBER 123456
 // Spread tối đa cho phép (points), ~2 pips cho 5-digit
 #define DEF_MAX_SPREAD 20.0
 // Comment hiển thị trên lệnh
-#define DEF_TRADE_COMMENT "SMA_Pullback_EA"
+#define DEF_TRADE_COMMENT "MA_Pullback_EA"
 
 // --- DRAWING SETTINGS ---
 // Vẽ signal và markers lên chart
@@ -78,6 +78,8 @@ enum ENUM_MA_TYPE_MODE
 #define DEF_MACD_SLOW 26
 // Chu kỳ MACD Signal
 #define DEF_MACD_SIGNAL 9
+// Chu kỳ ADX indicator
+#define DEF_ADX_PERIOD 14
 
 // --- STRATEGY SETTINGS ---
 // Cài đặt chiến lược entry
@@ -85,37 +87,49 @@ enum ENUM_MA_TYPE_MODE
 #define DEF_MAX_WAIT_BARS 20
 // Số nến tính ATR
 #define DEF_ATR_LENGTH 14
+// Số nến lookback để tìm Support/Resistance
+#define DEF_SR_LOOKBACK 20
 // Tỷ lệ Bóng/Thân nến cho confirmation candle
 #define DEF_WICK_BODY_RATIO 1.5
+// Tỷ lệ ATR để xác định vùng sideway quanh giá
+#define DEF_SIDEWAY_ATR_RATIO 2.0
 
 // --- FILTER SETTINGS ---
 // Điểm tối thiểu để signal được coi là valid (0-100)%
 #define DEF_MIN_SCORE_TO_PASS 60.0
 
-// --- FILTER 1: MA SLOPE ---
+// --- FILTER: MA SLOPE ---
 // Kiểm tra độ dốc MA có đủ mạnh không - xác định xu hướng rõ ràng
 // Bật/tắt filter
 #define DEF_ENABLE_MA_SLOPE true
 // Nếu true, filter fail sẽ loại bỏ signal hoàn toàn
 #define DEF_MA_SLOPE_CRITICAL false
 // Ngưỡng độ dốc tối thiểu (độ), 15 = vừa phải, 20 = mạnh hơn
-#define DEF_MA50_SLOPE_THRESHOLD 15.0
-// Số nến dùng để tính slope (làm mượt)
-#define DEF_SLOPE_SMOOTH_BARS 5
+#define DEF_MA_SLOPE_THRESHOLD 15.0
 // Trọng số điểm cho filter này (0-100)
 #define DEF_MA_SLOPE_WEIGHT 10.0
 
-// --- FILTER 2A: STATIC MOMENTUM ---
-// Kiểm tra RSI và MACD có xác nhận xu hướng không
-// RSI > 50 cho BUY, RSI < 50 cho SELL. MACD line > signal cho BUY
+// --- FILTER: STATIC RSI MOMENTUM ---
+// Kiểm tra RSI có xác nhận xu hướng không
+// RSI > 50 cho BUY, RSI < 50 cho SELL.
 // Bật/tắt filter
-#define DEF_ENABLE_STATIC_MOMENTUM true
+#define DEF_ENABLE_RSI_MOMENTUM true
 // Nếu true, filter fail sẽ loại bỏ signal hoàn toàn
-#define DEF_STATIC_MOMENTUM_CRITICAL false
+#define DEF_RSI_MOMENTUM_CRITICAL false
 // Trọng số điểm cho filter này (0-100)
-#define DEF_STATIC_MOMENTUM_WEIGHT 10.0
+#define DEF_RSI_MOMENTUM_WEIGHT 5.0
 
-// --- FILTER 2B: RSI REVERSAL ---
+// --- FILTER: STATIC MACD MOMENTUM ---
+// Kiểm tra MACD có xác nhận xu hướng không
+// MACD line > signal cho BUY
+// Bật/tắt filter
+#define DEF_ENABLE_MACD_MOMENTUM true
+// Nếu true, filter fail sẽ loại bỏ signal hoàn toàn
+#define DEF_MACD_MOMENTUM_CRITICAL false
+// Trọng số điểm cho filter này (0-100)
+#define DEF_MACD_MOMENTUM_WEIGHT 5.0
+
+// --- FILTER: RSI REVERSAL ---
 // Phát hiện RSI đang đi ngược hướng signal (dấu hiệu đảo chiều)
 // Bật/tắt filter
 #define DEF_ENABLE_RSI_REVERSAL true
@@ -126,7 +140,7 @@ enum ENUM_MA_TYPE_MODE
 // Trọng số điểm cho filter này (0-100)
 #define DEF_RSI_REVERSAL_WEIGHT 10.0
 
-// --- FILTER 2C: MACD HISTOGRAM ---
+// --- FILTER: MACD HISTOGRAM ---
 // Phát hiện histogram đang mở rộng ngược hướng (momentum shift)
 // Bật/tắt filter
 #define DEF_ENABLE_MACD_HISTOGRAM false
@@ -137,7 +151,7 @@ enum ENUM_MA_TYPE_MODE
 // Trọng số điểm cho filter này (0-100)
 #define DEF_MACD_HISTOGRAM_WEIGHT 10.0
 
-// --- FILTER 3: SMA200 TREND ---
+// --- FILTER: SMA200 TREND ---
 // Kiểm tra giá có cùng xu hướng với SMA200 không (trend dài hạn)
 // BUY: giá > SMA200, SELL: giá < SMA200
 // Bật/tắt filter
@@ -147,21 +161,19 @@ enum ENUM_MA_TYPE_MODE
 // Trọng số điểm cho filter này (0-100)
 #define DEF_SMA200_WEIGHT 10.0
 
-// --- FILTER 4: S/R ZONE ---
+// --- FILTER: S/R ZONE ---
 // Kiểm tra giá có trong vùng entry tốt không
 // BUY: giá gần Support, SELL: giá gần Resistance
 // Bật/tắt filter
 #define DEF_ENABLE_SR_ZONE_FILTER true
 // Nếu true, filter fail sẽ loại bỏ signal hoàn toàn
 #define DEF_SR_ZONE_CRITICAL false
-// Số nến lookback để tìm Support/Resistance
-#define DEF_SR_LOOKBACK 20
 // % vùng tốt từ S đến R (40% = 40% gần nhất với S cho BUY)
 #define DEF_SR_ZONE_PERCENT 40.0
 // Trọng số điểm cho filter này (0-100)
 #define DEF_SR_ZONE_WEIGHT 10.0
 
-// --- FILTER 4B: S/R MIN WIDTH ---
+// --- FILTER: S/R MIN WIDTH ---
 // Lọc vùng S/R quá hẹp (đảm bảo đủ khoảng để trade)
 // Bật/tắt filter
 #define DEF_ENABLE_SR_MIN_WIDTH true
@@ -179,31 +191,12 @@ enum ENUM_MA_TYPE_MODE
 // Trọng số điểm cho filter này (0-100)
 #define DEF_SR_MIN_WIDTH_WEIGHT 10.0
 
-// --- FILTER 5: MA NOISE ---
-// Lọc vùng giá dao động quanh MA50 (choppy/sideways)
-// Số nến tối thiểu giữa 2 lần giá cắt MA, 0 = tắt
-#define DEF_MIN_CUT_INTERVAL 3
-// Trọng số cho Cut Interval
-#define DEF_CUT_INTERVAL_WEIGHT 10.0
-// Số lần cắt MA tối đa trong lookback, 0 = tắt
-#define DEF_MAX_CUTS_IN_LOOKBACK 2
-// Số nến lookback để đếm số lần cắt MA
-#define DEF_CUTS_LOOKBACK_BARS 10
-// Trọng số cho Max Cuts
-#define DEF_MAX_CUTS_WEIGHT 10.0
-// Khoảng cách tối thiểu từ peak giá đến MA (đơn vị: x ATR), 0 = tắt
-#define DEF_PEAK_MA_DIST_THRESHOLD 0.25
-// Trọng số cho Peak-MA Distance
-#define DEF_PEAK_MA_DIST_WEIGHT 5.0
-
-// --- FILTER 6: ADX TREND STRENGTH ---
+// --- FILTER: ADX TREND STRENGTH ---
 // Kiểm tra thị trường có đang trending không (tránh sideway)
 // Bật/tắt filter
 #define DEF_ENABLE_ADX_FILTER true
 // Nếu true, filter fail sẽ loại bỏ signal hoàn toàn
 #define DEF_ADX_CRITICAL false
-// Chu kỳ ADX indicator
-#define DEF_ADX_PERIOD 14
 // Ngưỡng ADX tối thiểu:
 // 20-25: trending yếu, 25-30: trending mạnh, >30: trending rất mạnh
 #define DEF_MIN_ADX_THRESHOLD 20.0
@@ -212,7 +205,7 @@ enum ENUM_MA_TYPE_MODE
 // Trọng số điểm cho filter này (0-100)
 #define DEF_ADX_WEIGHT 10.0
 
-// --- FILTER 7: BODY/ATR RATIO ---
+// --- FILTER: BODY/ATR RATIO ---
 // Kiểm tra nến confirm có đủ mạnh không (thân nến lớn so với ATR)
 // Bật/tắt filter
 #define DEF_ENABLE_BODY_ATR_FILTER true
@@ -223,7 +216,7 @@ enum ENUM_MA_TYPE_MODE
 // Trọng số điểm cho filter này (0-100)
 #define DEF_BODY_ATR_WEIGHT 5.0
 
-// --- FILTER 8: VOLUME CONFIRMATION ---
+// --- FILTER: VOLUME CONFIRMATION ---
 // Kiểm tra volume có đủ so với trung bình không
 // Off by default - forex không có volume thật (chỉ tick volume)
 // Bật/tắt filter
@@ -237,7 +230,7 @@ enum ENUM_MA_TYPE_MODE
 // Trọng số điểm cho filter này (0-100)
 #define DEF_VOLUME_WEIGHT 5.0
 
-// --- FILTER 9: PRICE-MA DISTANCE ---
+// --- FILTER: PRICE-MA DISTANCE ---
 // Tránh chase - giá không quá xa MA50 (entry đã muộn)
 // Bật/tắt filter
 #define DEF_ENABLE_PRICE_MA_DIST true
@@ -248,7 +241,7 @@ enum ENUM_MA_TYPE_MODE
 // Trọng số điểm cho filter này (0-100)
 #define DEF_PRICE_MA_DIST_WEIGHT 10.0
 
-// --- FILTER 10: TIME CONTROL (EA Only) ---
+// --- FILTER: TIME CONTROL (EA Only) ---
 // Chỉ trade trong giờ tốt - tránh phiên Á trầm lắng
 // Bật/tắt filter
 #define DEF_ENABLE_TIME_FILTER false
@@ -261,7 +254,7 @@ enum ENUM_MA_TYPE_MODE
 // Trọng số điểm cho filter này (0 = không tính điểm, chỉ lọc)
 #define DEF_TIME_WEIGHT 0.0
 
-// --- FILTER 11: NEWS FILTER (EA Only) ---
+// --- FILTER: NEWS FILTER (EA Only) ---
 // Tránh trade gần tin quan trọng - volatility cao
 // Bật/tắt filter
 #define DEF_ENABLE_NEWS_FILTER false
@@ -276,7 +269,7 @@ enum ENUM_MA_TYPE_MODE
 // Trọng số điểm cho filter này (0 = không tính điểm, chỉ lọc)
 #define DEF_NEWS_WEIGHT 0.0
 
-// --- FILTER 12: CONSECUTIVE LOSSES (EA Only) ---
+// --- FILTER: CONSECUTIVE LOSSES (EA Only) ---
 // Tạm dừng sau chuỗi thua liên tiếp - bảo vệ tâm lý và vốn
 // Bật/tắt filter
 #define DEF_ENABLE_CONSEC_LOSS_FILTER true

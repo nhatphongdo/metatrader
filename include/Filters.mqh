@@ -14,209 +14,39 @@
 
 #include "Utility.mqh"
 
-// ====================================================================
-// ===================== CẤU HÌNH THỐNG NHẤT ==========================
-// ====================================================================
-// Struct chứa tất cả cấu hình cho 10 filters
-// Mỗi filter có: enable (bật/tắt), threshold (ngưỡng), weight (trọng số)
-
-struct UnifiedScoringConfig
-{
-   // -----------------------------------------------------------------
-   // FILTER 1: MA SLOPE (Độ dốc đường MA)
-   // Kiểm tra xu hướng của MA50 có đủ mạnh không
-   // BUY: MA50 phải đang tăng (slope dương)
-   // SELL: MA50 phải đang giảm (slope âm)
-   // -----------------------------------------------------------------
-   bool enableMASlopeFilter;  // Bật/tắt filter
-   bool maSlopeCritical;      // Nếu true, fail = critical fail
-   double maSlopeThreshold;   // Góc tối thiểu (độ)
-   int slopeSmoothBars;       // Số nến tính smoothed slope (0 = 2-bar)
-   double maSlopeWeight;      // Trọng số điểm (0-100)
-
-   // -----------------------------------------------------------------
-   // FILTER 2A: STATIC MOMENTUM (RSI + MACD position)
-   // Kiểm tra RSI và MACD có confirm xu hướng không
-   // RSI: BUY nếu > 50, SELL nếu < 50
-   // MACD: BUY nếu MACD > Signal, SELL nếu MACD < Signal
-   // -----------------------------------------------------------------
-   bool enableStaticMomentumFilter;  // Bật/tắt filter
-   bool staticMomentumCritical;      // Nếu true, fail = critical fail
-   double staticMomentumWeight;      // Trọng số điểm
-
-   // -----------------------------------------------------------------
-   // FILTER 2B: RSI REVERSAL
-   // Phát hiện RSI đang đi ngược hướng signal (đảo chiều momentum)
-   // SELL bị từ chối nếu RSI đang tăng liên tục
-   // BUY bị từ chối nếu RSI đang giảm liên tục
-   // -----------------------------------------------------------------
-   bool enableRSIReversalFilter;  // Bật/tắt filter
-   bool rsiReversalCritical;      // Nếu true, fail = critical fail
-   int rsiReversalLookback;       // Số nến kiểm tra trend (2-5)
-   double rsiReversalWeight;      // Trọng số điểm
-
-   // -----------------------------------------------------------------
-   // FILTER 2C: MACD HISTOGRAM TREND
-   // Phát hiện histogram đang mở rộng ngược hướng signal
-   // SELL bị từ chối nếu histogram đang tăng
-   // BUY bị từ chối nếu histogram đang giảm
-   // -----------------------------------------------------------------
-   bool enableMACDHistogramFilter;  // Bật/tắt filter
-   bool macdHistogramCritical;      // Nếu true, fail = critical fail
-   int macdHistogramLookback;       // Số nến kiểm tra trend (1-3)
-   double macdHistogramWeight;      // Trọng số điểm
-
-   // -----------------------------------------------------------------
-   // FILTER 3: SMA200 TREND
-   // Kiểm tra xu hướng dài hạn
-   // BUY: Giá đóng cửa trên SMA200
-   // SELL: Giá đóng cửa dưới SMA200
-   // -----------------------------------------------------------------
-   bool enableSMA200Filter;  // Bật/tắt filter
-   bool sma200Critical;      // Nếu true, fail = critical fail
-   double sma200Weight;      // Trọng số điểm
-
-   // -----------------------------------------------------------------
-   // FILTER 4: S/R ZONE (Vùng hỗ trợ/kháng cự)
-   // Kiểm tra giá có nằm trong vùng entry tốt không
-   // BUY: Giá gần vùng support
-   // SELL: Giá gần vùng resistance
-   // -----------------------------------------------------------------
-   bool enableSRZoneFilter;  // Bật/tắt filter
-   bool srZoneCritical;      // Nếu true, fail = critical fail
-   double srZonePercent;     // % vùng S/R cho phép (30 = 30%)
-   double srZoneWeight;      // Trọng số điểm
-   int srLookback;           // Số nến lookback tính S/R
-
-   // -----------------------------------------------------------------
-   // FILTER 4B: S/R MIN WIDTH (Độ rộng tối thiểu vùng S/R)
-   // Lọc các vùng S/R quá hẹp, tránh bị cắt SL nhanh
-   // Khoảng cách R-S phải >= minSRWidthATR * ATR
-   // -----------------------------------------------------------------
-   bool enableSRMinWidthFilter;  // Bật/tắt filter
-   bool srMinWidthCritical;      // Nếu true, fail = critical fail
-   double minSRWidthATR;         // Độ rộng tối thiểu (bội số ATR, vd: 1.5 = 1.5*ATR)
-   double srMinWidthWeight;      // Trọng số điểm
-
-   // -----------------------------------------------------------------
-   // FILTER 5: ADX (Sức mạnh xu hướng)
-   // Kiểm tra thị trường có đang trending không
-   // ADX > threshold = trending, nên vào lệnh
-   // ADX < threshold = sideway, nên tránh
-   // -----------------------------------------------------------------
-   bool enableADXFilter;           // Bật/tắt filter
-   bool adxCritical;               // Nếu true, fail = critical fail
-   double minADXThreshold;         // Ngưỡng ADX tối thiểu (thường 20-25)
-   bool useADXDirectionalConfirm;  // Kiểm tra thêm +DI/-DI
-   double adxWeight;               // Trọng số điểm
-
-   // -----------------------------------------------------------------
-   // FILTER 6: BODY/ATR RATIO
-   // Kiểm tra kích thước body nến confirmation
-   // Body phải đủ lớn so với ATR để tránh nến indecision
-   // -----------------------------------------------------------------
-   bool enableBodyATRFilter;  // Bật/tắt filter
-   bool bodyATRCritical;      // Nếu true, fail = critical fail
-   double minBodyATRRatio;    // Tỷ lệ tối thiểu (0.3 = 30% ATR)
-   int atrLength;             // Chu kỳ tính ATR
-   double bodyATRWeight;      // Trọng số điểm
-
-   // -----------------------------------------------------------------
-   // FILTER 7: VOLUME (Xác nhận khối lượng)
-   // Kiểm tra volume nến confirmation có cao hơn trung bình không
-   // Volume cao = nhiều người tham gia = tín hiệu mạnh hơn
-   // -----------------------------------------------------------------
-   bool enableVolumeFilter;  // Bật/tắt filter
-   bool volumeCritical;      // Nếu true, fail = critical fail
-   int volumeAvgPeriod;      // Chu kỳ tính volume trung bình
-   double minVolumeRatio;    // Tỷ lệ tối thiểu (1.0 = 100%)
-   double volumeWeight;      // Trọng số điểm
-
-   // -----------------------------------------------------------------
-   // FILTER 8: PRICE-MA DISTANCE (Khoảng cách giá-MA)
-   // Kiểm tra giá có quá xa MA không
-   // Nếu quá xa = đã miss entry, không nên chase
-   // -----------------------------------------------------------------
-   bool enablePriceMADistFilter;  // Bật/tắt filter
-   bool priceMADistCritical;      // Nếu true, fail = critical fail
-   double maxPriceMADistATR;      // Khoảng cách tối đa (bội số ATR)
-   double priceMADistWeight;      // Trọng số điểm
-
-   // -----------------------------------------------------------------
-   // FILTER 9: TIME (Giờ giao dịch)
-   // Chỉ giao dịch trong khung giờ được chỉ định
-   // Tránh giờ ít thanh khoản hoặc spread cao
-   // -----------------------------------------------------------------
-   bool enableTimeFilter;  // Bật/tắt filter
-   bool timeCritical;      // Nếu true, fail = critical fail
-   int tradeStartHour;     // Giờ bắt đầu (0-23)
-   int tradeEndHour;       // Giờ kết thúc (0-23)
-   double timeWeight;      // Trọng số điểm
-
-   // -----------------------------------------------------------------
-   // FILTER 10: NEWS (Tin tức kinh tế)
-   // Tránh giao dịch trước/sau tin quan trọng
-   // Sử dụng MQL5 Economic Calendar API
-   // -----------------------------------------------------------------
-   bool enableNewsFilter;  // Bật/tắt filter
-   bool newsCritical;      // Nếu true, fail = critical fail
-   int newsMinutesBefore;  // Phút trước tin cần tránh
-   int newsMinutesAfter;   // Phút sau tin cần tránh
-   int newsMinImportance;  // Mức quan trọng (1=Low, 2=Med, 3=High)
-   double newsWeight;      // Trọng số điểm
-
-   // -----------------------------------------------------------------
-   // NGƯỠNG ĐIỂM TỐI THIỂU
-   // Signal phải đạt tổng điểm >= minScoreToPass mới được chấp nhận
-   // -----------------------------------------------------------------
-   double minScoreToPass;  // Điểm tối thiểu để pass
-};
-
-// ====================================================================
-// ===================== KẾT QUẢ FILTER ===============================
-// ====================================================================
-
 //+------------------------------------------------------------------+
 //| Kết quả từ một filter đơn lẻ                                     |
 //+------------------------------------------------------------------+
 struct ScoringFilterResult
 {
    bool passed;    // Filter có pass không
-   double score;   // Điểm đóng góp (0 nếu không pass)
+   double score;   // Điểm đóng góp (+N nếu pass, -N nếu không pass, 0 nếu lỗi)
    string reason;  // Lý do fail (rỗng nếu pass)
    double value;   // Giá trị tính được (debug)
-};
-
-//+------------------------------------------------------------------+
-//| Kết quả tổng hợp từ tất cả filters                               |
-//+------------------------------------------------------------------+
-struct UnifiedScoringResult
-{
-   double successScore;   // Tổng điểm từ các filter PASS
-   double failScore;      // Tổng điểm từ các filter FAIL
-   string allReasons;     // Tất cả lý do fail (mỗi dòng 1 lý do)
-   string filterDetails;  // Chi tiết đánh giá TẤT CẢ filter (dù pass hay không)
-   double support;        // Vùng hỗ trợ tính được
-   double resistance;     // Vùng kháng cự tính được
-   bool hasCriticalFail;  // Có lỗi nghiêm trọng (S/R không hợp lệ)
 };
 
 // ====================================================================
 // ================= CÁC FILTER FUNCTIONS =============================
 // ====================================================================
 // Mỗi filter function nhận config và data, trả về ScoringFilterResult
-// Nếu filter bị tắt (enable = false) sẽ trả về passed = true, score = 0
+// Nếu filter bị lỗi sẽ trả về passed = false, score = 0 với reason
+// Nếu filter thành công sẽ trả về passed = true, score = +điểm
+// Nếu filter không pass sẽ trả về passed = false, score = -điểm với reason
 
 //+------------------------------------------------------------------+
-//| FILTER 1: MA SLOPE                                               |
-//| Kiểm tra độ dốc của MA50 sử dụng linear regression               |
+//| MA SLOPE (Độ dốc đường MA)                                       |
+//| Kiểm tra độ dốc của MA sử dụng linear regression                 |
 //| Sử dụng slopeSmoothBars nến để tính slope chính xác hơn          |
-//| Công thức: Linear regression để tìm slope, convert sang độ       |
-//| Slope được scale theo ATR để tự động điều chỉnh theo biến động   |
+//| Công thức: Linear regression để tìm slope                        |
+//| BUY: MA phải đang tăng (slope dương)                             |
+//| SELL: MA phải đang giảm (slope âm)                               |
 //+------------------------------------------------------------------+
-ScoringFilterResult CheckMASlopeFilter(const UnifiedScoringConfig& config, bool isBuySignal, int confirmIdx,
-                                       const double& ma50[], const double& high[], const double& low[],
-                                       const double& atr[], double pointValue, int arraySize)
+ScoringFilterResult CheckMASlope(
+    int idx, const double& ma[], int arraySize,
+    double maSlopeThreshold,  // Slope tối thiểu (số dương, tùy vào signal sẽ đảo chiều so sánh)
+    int slopeSmoothBars,      // Số nến tính smoothed slope (0 = 2-bar) về phía cũ hơn
+    double maSlopeWeight      // Trọng số điểm
+)
 {
    ScoringFilterResult result;
    result.passed = false;
@@ -224,56 +54,62 @@ ScoringFilterResult CheckMASlopeFilter(const UnifiedScoringConfig& config, bool 
    result.reason = "";
    result.value = 0;
 
-   // Nếu filter tắt, tự động pass nhưng không cộng điểm
-   if (!config.enableMASlopeFilter)
+   // Tính slope bằng Linear Regression
+   int slopeBars = slopeSmoothBars;
+   if (slopeBars < 2)
+      slopeBars = 2;  // Tối thiểu 2 bars
+   if (idx + slopeBars > arraySize)
+      slopeBars = arraySize - idx;
+
+   if (slopeBars < 2 || idx >= arraySize)
    {
-      result.passed = true;
+      // Không đủ data để tính
+      result.reason = "Không đủ dữ liệu để tính slope, cần tối thiểu 2 nến";
       return result;
    }
 
-   // Scale slope theo biến động thực tế ATR
-   double atrPoints = atr[confirmIdx] / pointValue;
+   // Quy đồng trục thời gian về gốc để tính slope nhất quán cho tất cả lines
+   double xArr[];
+   ArrayResize(xArr, slopeBars);
+   for (int i = 0; i < slopeBars; i++)
+      xArr[i] = (double)i;
+   double yArr[];
+   ArrayResize(yArr, slopeBars);
+   for (int i = idx + slopeBars - 1; i >= idx; i--)
+   {
+      // Lấy giá trị từ cũ (index lớn) đển mới (index nhỏ) gán vào trục y theo trục x tăng dần
+      yArr[idx + slopeBars - 1 - i] = ma[i];
+   }
 
-   // Tính slope bằng Linear Regression
-   int slopeBars = config.slopeSmoothBars;
-   if (slopeBars < 2)
-      slopeBars = 2;  // Tối thiểu 2 bars
-   if (confirmIdx + slopeBars >= arraySize)
-      slopeBars = arraySize - confirmIdx - 1;
+   double outSlope, outIntercept;
+   CalculateLinearRegressionLine(xArr, yArr, slopeBars, outSlope, outIntercept);
 
-   double angle = CalculateLinearRegressionSlope(ma50, confirmIdx, slopeBars, pointValue, atrPoints);
+   result.value = outSlope;
 
-   result.value = angle;
-
-   // Kiểm tra góc có đủ ngưỡng không
-   // BUY cần slope dương, SELL cần slope âm
-   bool slopeOk = false;
-   if (isBuySignal)
-      slopeOk = (angle >= config.maSlopeThreshold);
-   else
-      slopeOk = (-angle >= config.maSlopeThreshold);
-
+   // Kiểm tra slope có đủ ngưỡng không
+   bool slopeOk = MathAbs(outSlope) >= MathAbs(maSlopeThreshold);
    if (slopeOk)
    {
       result.passed = true;
-      result.score = config.maSlopeWeight;
+      result.score = maSlopeWeight;
    }
    else
    {
-      result.reason = StringFormat("Slope yếu (%.1f°, cần %.1f°, %d nến)", MathAbs(angle), config.maSlopeThreshold,
-                                   config.slopeSmoothBars > 1 ? config.slopeSmoothBars : 2);
+      result.reason = StringFormat("Slope yếu (|%.5f|, cần |%.5f|, %d nến)", outSlope, maSlopeThreshold, slopeBars);
+      result.score = -maSlopeWeight;
    }
 
    return result;
 }
 
 //+------------------------------------------------------------------+
-//| FILTER 2A: STATIC MOMENTUM                                       |
-//| Kiểm tra RSI và MACD có confirm xu hướng không                   |
-//| Mỗi indicator pass được cộng momentumWeight điểm                 |
+//| STATIC RSI MOMENTUM                                              |
+//| Kiểm tra RSI có confirm xu hướng không                   |
+//|   RSI: BUY nếu > 50, SELL nếu < 50                               |
 //+------------------------------------------------------------------+
-ScoringFilterResult CheckStaticMomentumFilter(const UnifiedScoringConfig& config, bool isBuySignal, int confirmIdx,
-                                              const double& rsi[], const double& macdMain[], const double& macdSignal[])
+ScoringFilterResult CheckRSIMomentum(bool isBuySignal, int idx, const double& rsi[],
+                                     double rsiMomentumWeight  // Trọng số điểm
+)
 {
    ScoringFilterResult result;
    result.passed = false;
@@ -281,60 +117,87 @@ ScoringFilterResult CheckStaticMomentumFilter(const UnifiedScoringConfig& config
    result.reason = "";
    result.value = 0;
 
-   if (!config.enableStaticMomentumFilter)
-   {
-      result.passed = true;
-      return result;
-   }
-
-   int momentumCount = 0;
-
    // Kiểm tra RSI
-   // BUY: RSI > 50 (bullish momentum)
-   // SELL: RSI < 50 (bearish momentum)
    bool rsiOk = false;
    if (isBuySignal)
-      rsiOk = (rsi[confirmIdx] > 50);
+      rsiOk = (rsi[idx] > 50);
    else
-      rsiOk = (rsi[confirmIdx] < 50);
+      rsiOk = (rsi[idx] < 50);
+
+   result.value = rsi[idx];
+
    if (rsiOk)
-      momentumCount++;
+   {
+      result.passed = true;
+      result.score = rsiMomentumWeight;
+   }
+   else
+   {
+      if (isBuySignal)
+         result.reason = StringFormat("RSI không cùng xu hướng (RSI=%.2f, BUY cần >50)", rsi[idx]);
+      else
+         result.reason = StringFormat("RSI không cùng xu hướng (RSI=%.2f, SELL cần <50)", rsi[idx]);
+      result.score = -rsiMomentumWeight;
+   }
+
+   return result;
+}
+
+//+------------------------------------------------------------------+
+//| STATIC MACD MOMENTUM                                             |
+//| Kiểm tra MACD có confirm xu hướng không                   |
+//|   MACD: BUY nếu MACD > Signal, SELL nếu MACD < Signal            |
+//+------------------------------------------------------------------+
+ScoringFilterResult CheckMACDMomentum(bool isBuySignal, int idx, const double& macdMain[], const double& macdSignal[],
+                                      double macdMomentumWeight  // Trọng số điểm
+)
+{
+   ScoringFilterResult result;
+   result.passed = false;
+   result.score = 0;
+   result.reason = "";
+   result.value = 0;
 
    // Kiểm tra MACD
    // BUY: MACD > Signal (bullish crossover)
    // SELL: MACD < Signal (bearish crossover)
    bool macdOk = false;
    if (isBuySignal)
-      macdOk = (macdMain[confirmIdx] > macdSignal[confirmIdx]);
+      macdOk = (macdMain[idx] > macdSignal[idx]);
    else
-      macdOk = (macdMain[confirmIdx] < macdSignal[confirmIdx]);
+      macdOk = (macdMain[idx] < macdSignal[idx]);
+
+   result.value = macdMain[idx] - macdSignal[idx];
+
    if (macdOk)
-      momentumCount++;
-
-   result.value = momentumCount;
-
-   if (momentumCount > 0)
    {
       result.passed = true;
-      result.score = momentumCount * (config.staticMomentumWeight / 2.0);
+      result.score = macdMomentumWeight;
    }
    else
    {
-      result.reason = StringFormat("Momentum yếu (RSI=%.1f, MACD=%.5f, Sig=%.5f)", rsi[confirmIdx],
-                                   macdMain[confirmIdx], macdSignal[confirmIdx]);
+      if (isBuySignal)
+         result.reason =
+             StringFormat("MACD không cùng xu hướng (MACD=%.4f, BUY cần >Signal %.4f)", macdMain[idx], macdSignal[idx]);
+      else
+         result.reason = StringFormat("MACD không cùng xu hướng (MACD=%.4f, SELL cần <Signal %.4f)", macdMain[idx],
+                                      macdSignal[idx]);
+      result.score = -macdMomentumWeight;
    }
 
    return result;
 }
 
 //+------------------------------------------------------------------+
-//| FILTER 2B: RSI REVERSAL                                          |
+//| RSI REVERSAL                                                     |
 //| Phát hiện RSI đang đi ngược hướng signal (đảo chiều momentum)    |
 //| SELL bị từ chối nếu RSI đang tăng liên tục                       |
 //| BUY bị từ chối nếu RSI đang giảm liên tục                        |
 //+------------------------------------------------------------------+
-ScoringFilterResult CheckRSIReversalFilter(const UnifiedScoringConfig& config, bool isBuySignal, int confirmIdx,
-                                           const double& rsi[], int arraySize)
+ScoringFilterResult CheckRSIReversal(bool isBuySignal, int idx, const double& rsi[], int arraySize,
+                                     int rsiReversalLookback,  // Số nến để tính trend
+                                     double rsiReversalWeight  // Trọng số điểm
+)
 {
    ScoringFilterResult result;
    result.passed = false;
@@ -342,39 +205,30 @@ ScoringFilterResult CheckRSIReversalFilter(const UnifiedScoringConfig& config, b
    result.reason = "";
    result.value = 0;
 
-   if (!config.enableRSIReversalFilter)
-   {
-      result.passed = true;
-      return result;
-   }
-
    // Kiểm tra có đủ nến để tính trend không
-   int lookback = config.rsiReversalLookback;
+   int lookback = rsiReversalLookback;
    if (lookback < 2)
       lookback = 2;
-   if (confirmIdx + lookback >= arraySize)
+   if (idx + lookback >= arraySize)
    {
-      result.passed = true;  // Không đủ data, bỏ qua filter
+      result.reason = "Không đủ dữ liệu để tính RSI reversal, min 3 nến";
       return result;
    }
 
    // Kiểm tra RSI trend trong lookback nến
-   // ArraySetAsSeries = true: index nhỏ = mới, index lớn = cũ
-   // Nên RSI[confirmIdx] là mới nhất, RSI[confirmIdx+1] là cũ hơn
-   bool rsiIncreasing = true;  // RSI đang tăng
-   bool rsiDecreasing = true;  // RSI đang giảm
+   bool rsiIncreasing = true;  // Giả định RSI đang tăng
+   bool rsiDecreasing = true;  // Giả định RSI đang giảm
 
-   for (int i = 0; i < lookback - 1; i++)
+   for (int i = 0; i < lookback; i++)
    {
-      int idx = confirmIdx + i;
       // So sánh RSI[idx] với RSI[idx+1] (mới vs cũ)
-      if (rsi[idx] <= rsi[idx + 1])
+      if (rsi[idx + i] <= rsi[idx + i + 1])
          rsiIncreasing = false;  // Không tăng liên tục
-      if (rsi[idx] >= rsi[idx + 1])
+      if (rsi[idx + i] >= rsi[idx + i + 1])
          rsiDecreasing = false;  // Không giảm liên tục
    }
 
-   result.value = rsi[confirmIdx] - rsi[confirmIdx + lookback - 1];
+   result.value = rsi[idx] - rsi[idx + lookback];
 
    // Logic đảo chiều:
    // - BUY signal + RSI đang giảm = momentum yếu dần, có thể reversal
@@ -384,33 +238,38 @@ ScoringFilterResult CheckRSIReversalFilter(const UnifiedScoringConfig& config, b
    if (isBuySignal && rsiDecreasing)
    {
       hasReversal = true;
-      result.reason = StringFormat("RSI giảm ngược BUY (%.1f → %.1f)", rsi[confirmIdx + lookback - 1], rsi[confirmIdx]);
+      result.reason = StringFormat("RSI giảm ngược BUY (%.1f → %.1f)", rsi[idx + lookback], rsi[idx]);
    }
    else if (!isBuySignal && rsiIncreasing)
    {
       hasReversal = true;
-      result.reason =
-          StringFormat("RSI tăng ngược SELL (%.1f → %.1f)", rsi[confirmIdx + lookback - 1], rsi[confirmIdx]);
+      result.reason = StringFormat("RSI tăng ngược SELL (%.1f → %.1f)", rsi[idx + lookback], rsi[idx]);
    }
 
    if (!hasReversal)
    {
       result.passed = true;
-      result.score = config.rsiReversalWeight;
+      result.score = rsiReversalWeight;
    }
-   // Nếu hasReversal = true, passed = false (mặc định)
+   else
+   {
+      result.score = -rsiReversalWeight;
+   }
 
    return result;
 }
 
 //+------------------------------------------------------------------+
-//| FILTER 2C: MACD HISTOGRAM TREND                                  |
+//| MACD HISTOGRAM TREND                                             |
 //| Phát hiện histogram đang mở rộng ngược hướng signal              |
 //| SELL bị từ chối nếu histogram đang tăng (bullish momentum)       |
 //| BUY bị từ chối nếu histogram đang giảm (bearish momentum)        |
 //+------------------------------------------------------------------+
-ScoringFilterResult CheckMACDHistogramFilter(const UnifiedScoringConfig& config, bool isBuySignal, int confirmIdx,
-                                             const double& macdMain[], const double& macdSignal[], int arraySize)
+ScoringFilterResult CheckMACDHistogram(bool isBuySignal, int idx, const double& macdMain[], const double& macdSignal[],
+                                       int arraySize,
+                                       int macdHistogramLookback,  // Số nến để tính trend
+                                       double macdHistogramWeight  // Trọng số điểm
+)
 {
    ScoringFilterResult result;
    result.passed = false;
@@ -418,31 +277,34 @@ ScoringFilterResult CheckMACDHistogramFilter(const UnifiedScoringConfig& config,
    result.reason = "";
    result.value = 0;
 
-   if (!config.enableMACDHistogramFilter)
-   {
-      result.passed = true;
-      return result;
-   }
-
    // Kiểm tra có đủ nến để tính trend không
-   int lookback = config.macdHistogramLookback;
+   int lookback = macdHistogramLookback;
    if (lookback < 1)
       lookback = 1;
-   if (confirmIdx + lookback >= arraySize)
+   if (idx + lookback >= arraySize)
    {
-      result.passed = true;  // Không đủ data, bỏ qua filter
+      result.reason = "Không đủ dữ liệu để tính MACD histogram, min 2 nến";
       return result;
    }
 
    // Tính histogram = MACD - Signal
-   double histCurrent = macdMain[confirmIdx] - macdSignal[confirmIdx];
-   double histPrev = macdMain[confirmIdx + lookback] - macdSignal[confirmIdx + lookback];
+   double histCurrent = macdMain[idx] - macdSignal[idx];
+   double histPrev = macdMain[idx + lookback] - macdSignal[idx + lookback];
 
    result.value = histCurrent - histPrev;
 
    // Kiểm tra histogram trend
-   bool histIncreasing = (histCurrent > histPrev);  // Histogram đang tăng
-   bool histDecreasing = (histCurrent < histPrev);  // Histogram đang giảm
+   bool histIncreasing = true;  // Giả định histogram đang tăng
+   bool histDecreasing = true;  // Giả định histogram đang giảm
+
+   for (int i = 0; i < lookback; i++)
+   {
+      // So sánh histogram[idx] với histogram[idx+1] (mới vs cũ)
+      if (macdMain[idx + i] - macdSignal[idx + i] <= macdMain[idx + i + 1] - macdSignal[idx + i + 1])
+         histIncreasing = false;  // Không tăng liên tục
+      if (macdMain[idx + i] - macdSignal[idx + i] >= macdMain[idx + i + 1] - macdSignal[idx + i + 1])
+         histDecreasing = false;  // Không giảm liên tục
+   }
 
    // Logic đảo chiều:
    // - BUY signal + histogram đang giảm = bearish momentum đang mạnh lên
@@ -463,60 +325,68 @@ ScoringFilterResult CheckMACDHistogramFilter(const UnifiedScoringConfig& config,
    if (!hasReversal)
    {
       result.passed = true;
-      result.score = config.macdHistogramWeight;
+      result.score = macdHistogramWeight;
    }
-   // Nếu hasReversal = true, passed = false (mặc định)
+   else
+   {
+      result.score = -macdHistogramWeight;
+   }
 
    return result;
 }
 
 //+------------------------------------------------------------------+
-//| FILTER 3: SMA200 TREND                                           |
-//| Kiểm tra giá có cùng xu hướng với SMA200 không                   |
+//| MA TREND                                                         |
+//| Kiểm tra giá có cùng xu hướng với MA không                       |
+//| BUY: Giá đóng cửa trên MA                                        |
+//| SELL: Giá đóng cửa dưới MA                                       |
 //+------------------------------------------------------------------+
-ScoringFilterResult CheckSMA200Filter(const UnifiedScoringConfig& config, bool isBuySignal, int confirmIdx,
-                                      const double& close[], const double& sma200[], double tickSize)
+ScoringFilterResult CheckMATrend(bool isBuySignal, int idx, const double& close[], const double& ma[], double tickSize,
+                                 double maTrendWeight  // Trọng số điểm
+)
 {
    ScoringFilterResult result;
    result.passed = false;
    result.score = 0;
    result.reason = "";
-   result.value = close[confirmIdx] - sma200[confirmIdx];
-
-   if (!config.enableSMA200Filter)
-   {
-      result.passed = true;
-      return result;
-   }
+   result.value = close[idx] - ma[idx];
 
    // Helper functions inline
-   bool sma200Ok = false;
+   bool maOk = false;
    if (isBuySignal)
-      sma200Ok = (close[confirmIdx] > sma200[confirmIdx] + tickSize);
+      maOk = (close[idx] > ma[idx] + tickSize);
    else
-      sma200Ok = (close[confirmIdx] < sma200[confirmIdx] - tickSize);
+      maOk = (close[idx] < ma[idx] - tickSize);
 
-   if (sma200Ok)
+   if (maOk)
    {
       result.passed = true;
-      result.score = config.sma200Weight;
+      result.score = maTrendWeight;
    }
    else
    {
-      result.reason = StringFormat("Sai MA (Close=%.5f, MA Slow=%.5f)", close[confirmIdx], sma200[confirmIdx]);
+      if (isBuySignal)
+         result.reason = StringFormat("Sai MA BUY Trend (Close=%.5f không > MA=%.5f)", close[idx], ma[idx]);
+      else
+         result.reason = StringFormat("Sai MA SELL Trend (Close=%.5f không < MA=%.5f)", close[idx], ma[idx]);
+      result.score = -maTrendWeight;
    }
 
    return result;
 }
 
 //+------------------------------------------------------------------+
-//| FILTER 4: S/R ZONE                                               |
-//| Tính vùng S/R và kiểm tra giá có trong vùng entry tốt không      |
-//| Hàm này cũng trả về support/resistance qua tham chiếu            |
+//| S/R ZONE                                                         |
+//| Kiểm tra giá có trong vùng entry tốt không                       |
+//| BUY: Giá gần vùng support                                        |
+//| SELL: Giá gần vùng resistance                                    |
 //+------------------------------------------------------------------+
-ScoringFilterResult CheckSRZoneFilter(const UnifiedScoringConfig& config, bool isBuySignal, int confirmIdx,
-                                      const double& high[], const double& low[], const double& close[], int arraySize,
-                                      double& outSupport, double& outResistance)
+ScoringFilterResult CheckSRZone(bool isBuySignal, int idx, const double& close[],
+                                double support,        // Giá hỗ trợ tại idx
+                                double resistance,     // Giá kháng cự tại idx
+                                double srZonePercent,  // % vùng S/R cho phép (30 = 30%)
+                                double srZoneWeight    // Trọng số điểm
+)
 {
    ScoringFilterResult result;
    result.passed = false;
@@ -524,118 +394,99 @@ ScoringFilterResult CheckSRZoneFilter(const UnifiedScoringConfig& config, bool i
    result.reason = "";
    result.value = 0;
 
-   // Luôn tính S/R (cần cho entry/SL/TP)
-   outSupport = 999999999;
-   outResistance = 0;
-
-   int srStart = confirmIdx;
-   int srEnd = confirmIdx + config.srLookback;
-   if (srEnd >= arraySize)
-      srEnd = arraySize - 1;
-
-   // Tìm high nhất và low nhất trong lookback period
-   for (int j = srStart; j <= srEnd; j++)
-   {
-      if (high[j] > outResistance)
-         outResistance = high[j];
-      if (low[j] < outSupport)
-         outSupport = low[j];
-   }
-
    // Kiểm tra S/R hợp lệ
-   if (outSupport <= 0 || outResistance <= 0 || outResistance <= outSupport)
+   if (support <= 0 || resistance <= 0 || resistance <= support)
    {
       result.reason = "Lỗi S/R";
-      return result;  // Critical fail
-   }
-
-   if (!config.enableSRZoneFilter)
-   {
-      result.passed = true;
       return result;
    }
 
    // Tính vùng entry cho phép
-   double srRange = outResistance - outSupport;
+   double srRange = resistance - support;
    bool inZone = false;
    double limitPrice = 0;
 
    if (isBuySignal)
    {
       // BUY: Giá phải nằm trong vùng dưới (gần support)
-      limitPrice = outSupport + srRange * config.srZonePercent / 100.0;
-      inZone = (close[confirmIdx] >= outSupport && close[confirmIdx] <= limitPrice);
+      limitPrice = support + srRange * srZonePercent / 100.0;
+      inZone = (close[idx] >= support && close[idx] <= limitPrice);
    }
    else
    {
       // SELL: Giá phải nằm trong vùng trên (gần resistance)
-      limitPrice = outResistance - srRange * config.srZonePercent / 100.0;
-      inZone = (close[confirmIdx] <= outResistance && close[confirmIdx] >= limitPrice);
+      limitPrice = resistance - srRange * srZonePercent / 100.0;
+      inZone = (close[idx] <= resistance && close[idx] >= limitPrice);
    }
 
-   result.value = close[confirmIdx];
+   result.value = limitPrice;
 
    if (inZone)
    {
       result.passed = true;
-      result.score = config.srZoneWeight;
+      result.score = srZoneWeight;
    }
    else
    {
-      result.reason = StringFormat("Ngoài vùng S/R (Cl=%.5f, Lim=%.5f, S=%.5f, R=%.5f)", close[confirmIdx], limitPrice,
-                                   outSupport, outResistance);
+      result.reason = StringFormat("Ngoài vùng S/R (Cl=%.5f, Lim=%.5f, S=%.5f, R=%.5f)", close[idx], limitPrice,
+                                   support, resistance);
+      result.score = -srZoneWeight;
    }
 
    return result;
 }
 
 //+------------------------------------------------------------------+
-//| FILTER 4B: S/R MIN WIDTH                                         |
+//| S/R MIN WIDTH (Độ rộng tối thiểu vùng S/R)                       |
 //| Kiểm tra độ rộng tối thiểu vùng S/R để tránh cắt SL nhanh        |
-//| Vùng S/R quá hẹp = rủi ro cao, dễ bị SL                          |
+//| Lọc các vùng S/R quá hẹp, tránh bị cắt SL nhanh                  |
+//| Khoảng cách R-S phải >= minSRWidthATR * ATR                      |
 //+------------------------------------------------------------------+
-ScoringFilterResult CheckSRMinWidthFilter(const UnifiedScoringConfig& config, int confirmIdx, double support,
-                                          double resistance, const double& high[], const double& low[],
-                                          const double& atr[], int arraySize, double& outSRRangeATR)
+ScoringFilterResult CheckSRMinWidth(int idx, const double& atr[],
+                                    double support,          // Giá hỗ trợ tại idx
+                                    double resistance,       // Giá kháng cự tại idx
+                                    double minSRWidthATR,    // Ngưỡng tối thiểu (bội số ATR)
+                                    double srMinWidthWeight  // Trọng số điểm
+)
 {
    ScoringFilterResult result;
    result.passed = false;
    result.score = 0;
    result.reason = "";
    result.value = 0;
-   outSRRangeATR = 0;
-
-   if (!config.enableSRMinWidthFilter)
-   {
-      result.passed = true;
-      return result;
-   }
 
    // Tính độ rộng vùng S/R theo bội số ATR
    double srRange = resistance - support;
-   outSRRangeATR = srRange / atr[confirmIdx];
-   result.value = outSRRangeATR;
+   double srRangeATR = srRange / atr[idx];
+   result.value = srRangeATR;
 
    // Kiểm tra >= ngưỡng
-   if (outSRRangeATR >= config.minSRWidthATR)
+   if (srRangeATR >= minSRWidthATR)
    {
       result.passed = true;
-      result.score = config.srMinWidthWeight;
+      result.score = srMinWidthWeight;
    }
    else
    {
-      result.reason = StringFormat("S/R hẹp (%.1f ATR < %.1f ATR)", outSRRangeATR, config.minSRWidthATR);
+      result.reason = StringFormat("S/R hẹp (%.2f ATR < %.2f ATR)", srRangeATR, minSRWidthATR);
+      result.score = -srMinWidthWeight;
    }
 
    return result;
 }
 
 //+------------------------------------------------------------------+
-//| FILTER 5: ADX                                                    |
-//| Kiểm tra sức mạnh xu hướng bằng ADX                              |
+//| ADX - Kiểm tra sức mạnh xu hướng bằng ADX                        |
+//| Kiểm tra thị trường có đang trending không                       |
+//| ADX > threshold = trending, nên vào lệnh                         |
+//| ADX < threshold = sideway, nên tránh                             |
 //+------------------------------------------------------------------+
-ScoringFilterResult CheckADXFilter(const UnifiedScoringConfig& config, bool isBuySignal, int confirmIdx,
-                                   const double& adxMain[], const double& adxPlusDI[], const double& adxMinusDI[])
+ScoringFilterResult CheckADX(bool isBuySignal, int idx, const double& adxMain[], const double& adxPlusDI[],
+                             const double& adxMinusDI[],
+                             double minADXThreshold,         // Ngưỡng ADX tối thiểu (thường 20-25)
+                             bool useADXDirectionalConfirm,  // Kiểm tra thêm +DI/-DI
+                             double adxWeight                // Trọng số điểm
+)
 {
    ScoringFilterResult result;
    result.passed = false;
@@ -643,48 +494,48 @@ ScoringFilterResult CheckADXFilter(const UnifiedScoringConfig& config, bool isBu
    result.reason = "";
    result.value = 0;
 
-   if (!config.enableADXFilter)
-   {
-      result.passed = true;
-      return result;
-   }
-
-   result.value = adxMain[confirmIdx];
+   result.value = adxMain[idx];
 
    // ADX phải >= ngưỡng (thị trường đang trending)
-   if (adxMain[confirmIdx] < config.minADXThreshold)
+   if (adxMain[idx] < minADXThreshold)
    {
-      result.reason = StringFormat("ADX yếu (%.1f < %.1f)", adxMain[confirmIdx], config.minADXThreshold);
+      result.reason = StringFormat("ADX yếu (%.2f < %.2f)", adxMain[idx], minADXThreshold);
+      result.score = -adxWeight;
       return result;
    }
 
    // Kiểm tra +DI/-DI nếu bật
-   if (config.useADXDirectionalConfirm)
+   if (useADXDirectionalConfirm)
    {
-      if (isBuySignal && adxPlusDI[confirmIdx] <= adxMinusDI[confirmIdx])
+      if (isBuySignal && adxPlusDI[idx] <= adxMinusDI[idx])
       {
-         result.reason = StringFormat("+DI (%.1f) <= -DI (%.1f)", adxPlusDI[confirmIdx], adxMinusDI[confirmIdx]);
+         result.reason = StringFormat("+DI (%.2f) <= -DI (%.2f)", adxPlusDI[idx], adxMinusDI[idx]);
+         result.score = -adxWeight;
          return result;
       }
-      if (!isBuySignal && adxMinusDI[confirmIdx] <= adxPlusDI[confirmIdx])
+      if (!isBuySignal && adxMinusDI[idx] <= adxPlusDI[idx])
       {
-         result.reason = StringFormat("-DI (%.1f) <= +DI (%.1f)", adxMinusDI[confirmIdx], adxPlusDI[confirmIdx]);
+         result.reason = StringFormat("-DI (%.2f) <= +DI (%.2f)", adxMinusDI[idx], adxPlusDI[idx]);
+         result.score = -adxWeight;
          return result;
       }
    }
 
    result.passed = true;
-   result.score = config.adxWeight;
+   result.score = adxWeight;
    return result;
 }
 
 //+------------------------------------------------------------------+
-//| FILTER 6: BODY/ATR RATIO                                         |
+//| BODY/ATR RATIO                                                   |
 //| Kiểm tra body nến confirmation có đủ lớn không                   |
+//| Body phải đủ lớn so với ATR để tránh nến indecision              |
 //+------------------------------------------------------------------+
-ScoringFilterResult CheckBodyATRFilter(const UnifiedScoringConfig& config, int confirmIdx, const double& open[],
-                                       const double& close[], const double& high[], const double& low[],
-                                       const double& atr[], int arraySize)
+ScoringFilterResult CheckBodyATR(bool isBuySignal, int idx, const double& open[], const double& close[],
+                                 const double& atr[],
+                                 double minBodyATRRatio,  // Tỷ lệ tối thiểu (0.3 = 30% ATR)
+                                 double bodyATRWeight     // Trọng số điểm
+)
 {
    ScoringFilterResult result;
    result.passed = false;
@@ -692,36 +543,35 @@ ScoringFilterResult CheckBodyATRFilter(const UnifiedScoringConfig& config, int c
    result.reason = "";
    result.value = 0;
 
-   if (!config.enableBodyATRFilter)
-   {
-      result.passed = true;
-      return result;
-   }
-
    // Tính body size
-   double body = MathAbs(close[confirmIdx] - open[confirmIdx]);
+   double body = MathAbs(close[idx] - open[idx]);
 
-   result.value = body / atr[confirmIdx];
+   result.value = body / atr[idx];
 
-   if (result.value >= config.minBodyATRRatio)
+   if (result.value >= minBodyATRRatio)
    {
       result.passed = true;
-      result.score = config.bodyATRWeight;
+      result.score = bodyATRWeight;
    }
    else
    {
-      result.reason = StringFormat("Body/ATR nhỏ (%.2f < %.2f)", result.value, config.minBodyATRRatio);
+      result.reason = StringFormat("Body/ATR nhỏ (%.2f < %.2f)", result.value, minBodyATRRatio);
+      result.score = -bodyATRWeight;
    }
 
    return result;
 }
 
 //+------------------------------------------------------------------+
-//| FILTER 7: VOLUME                                                 |
+//| VOLUME (xác nhận khối lượng)                                     |
 //| Kiểm tra volume nến confirmation có cao hơn trung bình không     |
+//| Volume cao = nhiều người tham gia = tín hiệu mạnh hơn            |
 //+------------------------------------------------------------------+
-ScoringFilterResult CheckVolumeFilter(const UnifiedScoringConfig& config, int confirmIdx, const long& volume[],
-                                      int arraySize)
+ScoringFilterResult CheckVolume(int idx, const long& volume[], int arraySize,
+                                int volumeAvgPeriod,    // Chu kỳ tính volume trung bình
+                                double minVolumeRatio,  // Tỷ lệ tối thiểu (1.0 = 100%)
+                                double volumeWeight     // Trọng số điểm
+)
 {
    ScoringFilterResult result;
    result.passed = false;
@@ -729,95 +579,90 @@ ScoringFilterResult CheckVolumeFilter(const UnifiedScoringConfig& config, int co
    result.reason = "";
    result.value = 0;
 
-   if (!config.enableVolumeFilter)
-   {
-      result.passed = true;
-      return result;
-   }
-
    // Tính volume trung bình
    double avgVolume = 0;
-   int avgBars = MathMin(config.volumeAvgPeriod, arraySize - confirmIdx - 1);
+   int avgBars = MathMin(volumeAvgPeriod, arraySize - idx - 1);
    for (int i = 1; i <= avgBars; i++)
-      avgVolume += (double)volume[confirmIdx + i];
+      avgVolume += (double)volume[idx + i];
    if (avgBars > 0)
       avgVolume = avgVolume / avgBars;
 
    if (avgVolume <= 0)
    {
-      result.passed = true;
+      result.reason = "Không có volume";
       return result;
    }
 
-   result.value = (double)volume[confirmIdx] / avgVolume;
+   result.value = (double)volume[idx] / avgVolume;
 
-   if (result.value >= config.minVolumeRatio)
+   if (result.value >= minVolumeRatio)
    {
       result.passed = true;
-      result.score = config.volumeWeight;
+      result.score = volumeWeight;
    }
    else
    {
-      result.reason = StringFormat("Volume thấp (%.0f%% < %.0f%%)", result.value * 100, config.minVolumeRatio * 100);
+      result.reason = StringFormat("Volume thấp (%.2f%% < %.2f%%), Avg vol: %.0f", result.value * 100,
+                                   minVolumeRatio * 100, avgVolume);
+      result.score = -volumeWeight;
    }
 
    return result;
 }
 
 //+------------------------------------------------------------------+
-//| FILTER 8: PRICE-MA DISTANCE                                      |
+//| PRICE-MA DISTANCE                                                |
 //| Kiểm tra giá có quá xa MA không (tránh chase)                    |
+//| Nếu quá xa = đã miss entry, không nên chase                      |
 //+------------------------------------------------------------------+
-ScoringFilterResult CheckPriceMADistFilter(const UnifiedScoringConfig& config, int confirmIdx, const double& close[],
-                                           const double& high[], const double& low[], const double& ma[],
-                                           const double& atr[], int arraySize)
+ScoringFilterResult CheckPriceMADist(int idx, const double& close[], const double& ma[], const double& atr[],
+                                     int arraySize,
+                                     double maxPriceMADistATR,  // Khoảng cách tối đa (bội số ATR)
+                                     double priceMADistWeight   // Trọng số điểm
+)
 {
    ScoringFilterResult result;
    result.passed = false;
    result.score = 0;
    result.reason = "";
    result.value = 0;
-
-   if (!config.enablePriceMADistFilter)
-   {
-      result.passed = true;
-      return result;
-   }
 
    // Tính khoảng cách giá-MA theo bội số ATR
-   double distance = MathAbs(close[confirmIdx] - ma[confirmIdx]);
-   result.value = distance / atr[confirmIdx];
+   double distance = MathAbs(close[idx] - ma[idx]);
+   result.value = distance / atr[idx];
 
-   if (result.value <= config.maxPriceMADistATR)
+   if (result.value <= maxPriceMADistATR)
    {
       result.passed = true;
-      result.score = config.priceMADistWeight;
+      result.score = priceMADistWeight;
    }
    else
    {
-      result.reason = StringFormat("Giá xa MA (%.1f ATR > %.1f ATR)", result.value, config.maxPriceMADistATR);
+      result.reason = StringFormat("Giá xa MA (%.1f ATR > %.1f ATR)", result.value, maxPriceMADistATR);
+      result.score = -priceMADistWeight;
    }
 
    return result;
 }
 
 //+------------------------------------------------------------------+
-//| FILTER 9: TIME                                                   |
+//| TIME                                                             |
 //| Kiểm tra có trong khung giờ giao dịch không                      |
+//| Chỉ giao dịch trong khung giờ được chỉ định                      |
+//| Tránh giờ ít thanh khoản hoặc spread cao                         |
 //+------------------------------------------------------------------+
-ScoringFilterResult CheckTimeFilter(const UnifiedScoringConfig& config, datetime currentTime)
+ScoringFilterResult CheckTime(datetime currentTime,
+                              int tradeStartHour,  // Giờ bắt đầu (0-23)
+                              int tradeEndHour,    // Giờ kết thúc (0-23)
+                              double timeWeight    // Trọng số điểm
+
+)
 {
    ScoringFilterResult result;
    result.passed = false;
    result.score = 0;
    result.reason = "";
    result.value = 0;
-
-   if (!config.enableTimeFilter)
-   {
-      result.passed = true;
-      return result;
-   }
 
    MqlDateTime timeStruct;
    TimeToStruct(currentTime, timeStruct);
@@ -826,31 +671,37 @@ ScoringFilterResult CheckTimeFilter(const UnifiedScoringConfig& config, datetime
 
    // Xử lý wrap around (ví dụ: 22:00 - 06:00)
    bool inRange;
-   if (config.tradeStartHour <= config.tradeEndHour)
-      inRange = (currentHour >= config.tradeStartHour && currentHour < config.tradeEndHour);
+   if (tradeStartHour <= tradeEndHour)
+      inRange = (currentHour >= tradeStartHour && currentHour < tradeEndHour);
    else
-      inRange = (currentHour >= config.tradeStartHour || currentHour < config.tradeEndHour);
+      inRange = (currentHour >= tradeStartHour || currentHour < tradeEndHour);
 
    if (inRange)
    {
       result.passed = true;
-      result.score = config.timeWeight;
+      result.score = timeWeight;
    }
    else
    {
-      result.reason = StringFormat("Ngoài giờ GD (%02d:00, cần %02d-%02d)", currentHour, config.tradeStartHour,
-                                   config.tradeEndHour);
+      result.reason = StringFormat("Ngoài giờ GD (%02d:00, cần %02d-%02d)", currentHour, tradeStartHour, tradeEndHour);
+      result.score = -timeWeight;
    }
 
    return result;
 }
 
 //+------------------------------------------------------------------+
-//| FILTER 10: NEWS                                                  |
+//| NEWS                                                             |
 //| Kiểm tra có tin tức quan trọng sắp ra không                      |
+//| Tránh giao dịch trước/sau tin quan trọng                         |
 //| Sử dụng MQL5 Economic Calendar API                               |
 //+------------------------------------------------------------------+
-ScoringFilterResult CheckNewsFilter(const UnifiedScoringConfig& config, string symbol, datetime currentTime)
+ScoringFilterResult CheckNews(string symbol, datetime currentTime,
+                              int newsMinutesBefore,  // Phút trước tin cần tránh
+                              int newsMinutesAfter,   // Phút sau tin cần tránh
+                              int newsMinImportance,  // Mức quan trọng (1=Low, 2=Med, 3=High)
+                              double newsWeight       // Trọng số điểm
+)
 {
    ScoringFilterResult result;
    result.passed = false;
@@ -858,19 +709,13 @@ ScoringFilterResult CheckNewsFilter(const UnifiedScoringConfig& config, string s
    result.reason = "";
    result.value = 0;
 
-   if (!config.enableNewsFilter)
-   {
-      result.passed = true;
-      return result;
-   }
-
    // Lấy currency từ symbol (ví dụ: EURUSD -> EUR và USD)
    string baseCurrency = StringSubstr(symbol, 0, 3);
    string quoteCurrency = StringSubstr(symbol, 3, 3);
 
    // Khoảng thời gian cần kiểm tra
-   datetime timeFrom = currentTime - config.newsMinutesBefore * 60;
-   datetime timeTo = currentTime + config.newsMinutesAfter * 60;
+   datetime timeFrom = currentTime - newsMinutesBefore * 60;
+   datetime timeTo = currentTime + newsMinutesAfter * 60;
 
    // Kiểm tra tin cho base currency
    MqlCalendarValue values[];
@@ -882,10 +727,11 @@ ScoringFilterResult CheckNewsFilter(const UnifiedScoringConfig& config, string s
       {
          // newsMinImportance: 1=Low, 2=Medium, 3=High
          // event.importance: 0=None, 1=Low, 2=Medium, 3=High
-         if ((int)event.importance >= config.newsMinImportance + 1)
+         if ((int)event.importance >= newsMinImportance + 1)
          {
             int minutes = (int)((values[i].time - currentTime) / 60);
             result.reason = StringFormat("Tin %s (%d p)", baseCurrency, minutes);
+            result.score = -newsWeight;
             return result;
          }
       }
@@ -899,308 +745,19 @@ ScoringFilterResult CheckNewsFilter(const UnifiedScoringConfig& config, string s
       MqlCalendarEvent event;
       if (CalendarEventById(quoteValues[i].event_id, event))
       {
-         if ((int)event.importance >= config.newsMinImportance + 1)
+         if ((int)event.importance >= newsMinImportance + 1)
          {
             int minutes = (int)((quoteValues[i].time - currentTime) / 60);
             result.reason = StringFormat("Tin %s (%d p)", quoteCurrency, minutes);
+            result.score = -newsWeight;
             return result;
          }
       }
    }
 
    result.passed = true;
-   result.score = config.newsWeight;
+   result.score = newsWeight;
    return result;
-}
-
-// ====================================================================
-// ================== HÀM CHẠY TẤT CẢ FILTERS =========================
-// ====================================================================
-
-//+------------------------------------------------------------------+
-//| Chạy tất cả 10 filters và tính tổng điểm                         |
-//| Trả về UnifiedScoringResult chứa totalScore, reasons, S/R        |
-//+------------------------------------------------------------------+
-void RunUnifiedScoringFilters(const UnifiedScoringConfig& config, bool isBuySignal, int confirmIdx, string symbol,
-                              datetime currentTime, const double& open[], const double& high[], const double& low[],
-                              const double& close[], const double& ma50[], const double& sma200[], const double& rsi[],
-                              const double& macdMain[], const double& macdSignal[], const long& volume[],
-                              const double& adxMain[], const double& adxPlusDI[], const double& adxMinusDI[],
-                              const double& atr[], double tickSize, double pointValue, int arraySize,
-                              UnifiedScoringResult& outResult)
-{
-   // Khởi tạo kết quả
-   outResult.successScore = 0;
-   outResult.failScore = 0;
-   outResult.allReasons = "";
-   outResult.filterDetails = "";
-   outResult.support = 0;
-   outResult.resistance = 0;
-   outResult.hasCriticalFail = false;
-
-   ScoringFilterResult filterResult;
-   string statusStr;
-   double penalty;
-
-   // -----------------------------------------------------------------
-   // FILTER 1: MA SLOPE
-   // -----------------------------------------------------------------
-   filterResult = CheckMASlopeFilter(config, isBuySignal, confirmIdx, ma50, high, low, atr, pointValue, arraySize);
-   if (filterResult.passed)
-      outResult.successScore += config.maSlopeWeight;
-   else
-      outResult.failScore += config.maSlopeWeight;
-   statusStr = filterResult.passed ? "✓" : "✗";
-   penalty = filterResult.passed ? 0 : config.maSlopeWeight;
-   outResult.filterDetails += StringFormat("[FT-1] MA Slope %s: %.1f° (threshold=%.1f°) | -%.0f pts\n", statusStr,
-                                           filterResult.value, config.maSlopeThreshold, penalty);
-   if (!filterResult.passed && filterResult.reason != "")
-   {
-      outResult.allReasons += "- " + filterResult.reason + "\n";
-      if (config.maSlopeCritical)
-         outResult.hasCriticalFail = true;
-   }
-
-   // -----------------------------------------------------------------
-   // FILTER 2A: STATIC MOMENTUM (RSI + MACD position)
-   // -----------------------------------------------------------------
-   filterResult = CheckStaticMomentumFilter(config, isBuySignal, confirmIdx, rsi, macdMain, macdSignal);
-   if (filterResult.passed)
-      outResult.successScore += config.staticMomentumWeight;
-   else
-      outResult.failScore += config.staticMomentumWeight;
-   statusStr = filterResult.passed ? "✓" : "✗";
-   penalty = filterResult.passed ? 0 : config.staticMomentumWeight;
-   outResult.filterDetails += StringFormat("[FT-2A] Static Momentum %s: RSI=%.1f, MACD=%.5f | -%.0f pts\n", statusStr,
-                                           rsi[confirmIdx], macdMain[confirmIdx] - macdSignal[confirmIdx], penalty);
-   if (!filterResult.passed && filterResult.reason != "")
-   {
-      outResult.allReasons += "- " + filterResult.reason + "\n";
-      if (config.staticMomentumCritical)
-         outResult.hasCriticalFail = true;
-   }
-
-   // -----------------------------------------------------------------
-   // FILTER 2B: RSI REVERSAL
-   // -----------------------------------------------------------------
-   filterResult = CheckRSIReversalFilter(config, isBuySignal, confirmIdx, rsi, arraySize);
-   if (filterResult.passed)
-      outResult.successScore += config.rsiReversalWeight;
-   else
-      outResult.failScore += config.rsiReversalWeight;
-   statusStr = filterResult.passed ? "✓" : "✗";
-   penalty = filterResult.passed ? 0 : config.rsiReversalWeight;
-   outResult.filterDetails +=
-       StringFormat("[FT-2B] RSI Reversal %s: delta=%.1f | -%.0f pts\n", statusStr, filterResult.value, penalty);
-   if (!filterResult.passed && filterResult.reason != "")
-   {
-      outResult.allReasons += "- " + filterResult.reason + "\n";
-      if (config.rsiReversalCritical)
-         outResult.hasCriticalFail = true;
-   }
-
-   // -----------------------------------------------------------------
-   // FILTER 2C: MACD HISTOGRAM TREND
-   // -----------------------------------------------------------------
-   filterResult = CheckMACDHistogramFilter(config, isBuySignal, confirmIdx, macdMain, macdSignal, arraySize);
-   if (filterResult.passed)
-      outResult.successScore += config.macdHistogramWeight;
-   else
-      outResult.failScore += config.macdHistogramWeight;
-   statusStr = filterResult.passed ? "✓" : "✗";
-   penalty = filterResult.passed ? 0 : config.macdHistogramWeight;
-   outResult.filterDetails +=
-       StringFormat("[FT-2C] MACD Hist %s: delta=%.5f | -%.0f pts\n", statusStr, filterResult.value, penalty);
-   if (!filterResult.passed && filterResult.reason != "")
-   {
-      outResult.allReasons += "- " + filterResult.reason + "\n";
-      if (config.macdHistogramCritical)
-         outResult.hasCriticalFail = true;
-   }
-
-   // -----------------------------------------------------------------
-   // FILTER 3: SMA200 TREND
-   // -----------------------------------------------------------------
-   filterResult = CheckSMA200Filter(config, isBuySignal, confirmIdx, close, sma200, tickSize);
-   if (filterResult.passed)
-      outResult.successScore += config.sma200Weight;
-   else
-      outResult.failScore += config.sma200Weight;
-   statusStr = filterResult.passed ? "✓" : "✗";
-   penalty = filterResult.passed ? 0 : config.sma200Weight;
-   outResult.filterDetails +=
-       StringFormat("[FT-3] SMA200 Trend %s: diff=%.5f | -%.0f pts\n", statusStr, filterResult.value, penalty);
-   if (!filterResult.passed && filterResult.reason != "")
-   {
-      outResult.allReasons += "- " + filterResult.reason + "\n";
-      if (config.sma200Critical)
-         outResult.hasCriticalFail = true;
-   }
-
-   // -----------------------------------------------------------------
-   // FILTER 4: S/R ZONE (Critical - tính S/R cho entry/SL/TP)
-   // -----------------------------------------------------------------
-   double support = 0, resistance = 0;
-   filterResult = CheckSRZoneFilter(config, isBuySignal, confirmIdx, high, low, close, arraySize, support, resistance);
-   outResult.support = support;
-   outResult.resistance = resistance;
-
-   // S/R không hợp lệ là critical fail - DỪNG NGAY vì không thể tính tiếp
-   if (filterResult.reason == "Lỗi S/R")
-   {
-      outResult.filterDetails += "[FT-4] S/R Zone ✗: Lỗi S/R\n";
-      outResult.allReasons += "- " + filterResult.reason + "\n";
-      outResult.hasCriticalFail = true;
-      return;
-   }
-
-   if (filterResult.passed)
-      outResult.successScore += config.srZoneWeight;
-   else
-      outResult.failScore += config.srZoneWeight;
-   statusStr = filterResult.passed ? "✓" : "✗";
-   penalty = filterResult.passed ? 0 : config.srZoneWeight;
-   outResult.filterDetails +=
-       StringFormat("[FT-4] S/R Zone %s: S=%.5f, R=%.5f | -%.0f pts\n", statusStr, support, resistance, penalty);
-   if (!filterResult.passed && filterResult.reason != "")
-   {
-      outResult.allReasons += "- " + filterResult.reason + "\n";
-      if (config.srZoneCritical)
-         outResult.hasCriticalFail = true;
-   }
-
-   // -----------------------------------------------------------------
-   // FILTER 4B: S/R MIN WIDTH (lọc vùng S/R quá hẹp)
-   // -----------------------------------------------------------------
-   double srRangeATR = 0;
-   filterResult = CheckSRMinWidthFilter(config, confirmIdx, support, resistance, high, low, atr, arraySize, srRangeATR);
-   if (filterResult.passed)
-      outResult.successScore += config.srMinWidthWeight;
-   else
-      outResult.failScore += config.srMinWidthWeight;
-   statusStr = filterResult.passed ? "✓" : "✗";
-   penalty = filterResult.passed ? 0 : config.srMinWidthWeight;
-   outResult.filterDetails += StringFormat("[FT-4B] SR Width %s: %.1f ATR (min=%.1f) | -%.0f pts\n", statusStr,
-                                           srRangeATR, config.minSRWidthATR, penalty);
-   if (!filterResult.passed && filterResult.reason != "")
-   {
-      outResult.allReasons += "- " + filterResult.reason + "\n";
-      if (config.srMinWidthCritical)
-         outResult.hasCriticalFail = true;
-   }
-
-   // -----------------------------------------------------------------
-   // FILTER 5: ADX
-   // -----------------------------------------------------------------
-   filterResult = CheckADXFilter(config, isBuySignal, confirmIdx, adxMain, adxPlusDI, adxMinusDI);
-   if (filterResult.passed)
-      outResult.successScore += config.adxWeight;
-   else
-      outResult.failScore += config.adxWeight;
-   statusStr = filterResult.passed ? "✓" : "✗";
-   penalty = filterResult.passed ? 0 : config.adxWeight;
-   outResult.filterDetails += StringFormat("[FT-5] ADX %s: %.1f (+DI=%.1f, -DI=%.1f) | -%.0f pts\n", statusStr,
-                                           filterResult.value, adxPlusDI[confirmIdx], adxMinusDI[confirmIdx], penalty);
-   if (!filterResult.passed && filterResult.reason != "")
-   {
-      outResult.allReasons += "- " + filterResult.reason + "\n";
-      if (config.adxCritical)
-         outResult.hasCriticalFail = true;
-   }
-
-   // -----------------------------------------------------------------
-   // FILTER 6: BODY/ATR RATIO
-   // -----------------------------------------------------------------
-   filterResult = CheckBodyATRFilter(config, confirmIdx, open, close, high, low, atr, arraySize);
-   if (filterResult.passed)
-      outResult.successScore += config.bodyATRWeight;
-   else
-      outResult.failScore += config.bodyATRWeight;
-   statusStr = filterResult.passed ? "✓" : "✗";
-   penalty = filterResult.passed ? 0 : config.bodyATRWeight;
-   outResult.filterDetails += StringFormat("[FT-6] Body/ATR %s: %.3f (min=%.3f) | -%.0f pts\n", statusStr,
-                                           filterResult.value, config.minBodyATRRatio, penalty);
-   if (!filterResult.passed && filterResult.reason != "")
-   {
-      outResult.allReasons += "- " + filterResult.reason + "\n";
-      if (config.bodyATRCritical)
-         outResult.hasCriticalFail = true;
-   }
-
-   // -----------------------------------------------------------------
-   // FILTER 7: VOLUME
-   // -----------------------------------------------------------------
-   filterResult = CheckVolumeFilter(config, confirmIdx, volume, arraySize);
-   if (filterResult.passed)
-      outResult.successScore += config.volumeWeight;
-   else
-      outResult.failScore += config.volumeWeight;
-   statusStr = filterResult.passed ? "✓" : "✗";
-   penalty = filterResult.passed ? 0 : config.volumeWeight;
-   outResult.filterDetails += StringFormat("[FT-7] Volume %s: %.2fx (min=%.2f) | -%.0f pts\n", statusStr,
-                                           filterResult.value, config.minVolumeRatio, penalty);
-   if (!filterResult.passed && filterResult.reason != "")
-   {
-      outResult.allReasons += "- " + filterResult.reason + "\n";
-      if (config.volumeCritical)
-         outResult.hasCriticalFail = true;
-   }
-
-   // -----------------------------------------------------------------
-   // FILTER 8: PRICE-MA DISTANCE
-   // -----------------------------------------------------------------
-   filterResult = CheckPriceMADistFilter(config, confirmIdx, close, high, low, ma50, atr, arraySize);
-   if (filterResult.passed)
-      outResult.successScore += config.priceMADistWeight;
-   else
-      outResult.failScore += config.priceMADistWeight;
-   statusStr = filterResult.passed ? "✓" : "✗";
-   penalty = filterResult.passed ? 0 : config.priceMADistWeight;
-   outResult.filterDetails += StringFormat("[FT-8] Price-MA %s: %.2f ATR (max=%.2f) | -%.0f pts\n", statusStr,
-                                           filterResult.value, config.maxPriceMADistATR, penalty);
-   if (!filterResult.passed && filterResult.reason != "")
-   {
-      outResult.allReasons += "- " + filterResult.reason + "\n";
-      if (config.priceMADistCritical)
-         outResult.hasCriticalFail = true;
-   }
-
-   // -----------------------------------------------------------------
-   // FILTER 9: TIME
-   // -----------------------------------------------------------------
-   filterResult = CheckTimeFilter(config, currentTime);
-   if (filterResult.passed)
-      outResult.successScore += config.timeWeight;
-   else
-      outResult.failScore += config.timeWeight;
-   statusStr = filterResult.passed ? "✓" : "✗";
-   penalty = filterResult.passed ? 0 : config.timeWeight;
-   outResult.filterDetails += StringFormat("[FT-9] Time %s: hour=%.0f (%d-%d) | -%.0f pts\n", statusStr,
-                                           filterResult.value, config.tradeStartHour, config.tradeEndHour, penalty);
-   if (!filterResult.passed && filterResult.reason != "")
-   {
-      outResult.allReasons += "- " + filterResult.reason + "\n";
-      if (config.timeCritical)
-         outResult.hasCriticalFail = true;
-   }
-
-   // -----------------------------------------------------------------
-   // FILTER 10: NEWS
-   // -----------------------------------------------------------------
-   filterResult = CheckNewsFilter(config, symbol, currentTime);
-   if (filterResult.passed)
-      outResult.successScore += config.newsWeight;
-   else
-      outResult.failScore += config.newsWeight;
-   statusStr = filterResult.passed ? "✓" : "✗";
-   penalty = filterResult.passed ? 0 : config.newsWeight;
-   outResult.filterDetails += StringFormat("[FT-10] News %s | -%.0f pts\n", statusStr, penalty);
-   if (!filterResult.passed && filterResult.reason != "")
-   {
-      outResult.allReasons += "- " + filterResult.reason + "\n";
-      if (config.newsCritical)
-         outResult.hasCriticalFail = true;
-   }
 }
 
 #endif  // SIGNAL_FILTERS_H

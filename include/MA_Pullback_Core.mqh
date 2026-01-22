@@ -1,16 +1,15 @@
 //+------------------------------------------------------------------+
-//|                                          SMA Pullback Core Logic |
+//|                                          MA Pullback Core Logic  |
 //|                                    Copyright 2026, Do Nhat Phong |
 //|                                   https://github.com/nhatphongdo |
 //+------------------------------------------------------------------+
 #property copyright "Do Nhat Phong"
 
-#ifndef SMA_PULLBACK_CORE_H
-#define SMA_PULLBACK_CORE_H
+#ifndef MA_PULLBACK_CORE_H
+#define MA_PULLBACK_CORE_H
 
 // Include reusable modules
 #include "Filters.mqh"
-#include "MA_Filters.mqh"
 #include "Utility.mqh"
 #include "CandlePatterns.mqh"
 
@@ -47,41 +46,51 @@ struct SMAPullbackConfig
    // ==============================================================
    // INDICATOR PARAMETERS
    // ==============================================================
-   int sma50Period;            // Chu kỳ MA Fast
-   int sma200Period;           // Chu kỳ MA Slow
-   double ma50SlopeThreshold;  // Góc dốc MA Fast tối thiểu (độ)
-   int slopeSmoothBars;        // Số nến để tính slope trung bình
-   int rsiPeriod;              // Chu kỳ RSI
-   int macdFast;               // MACD Fast period
-   int macdSlow;               // MACD Slow period
-   int macdSignal;             // MACD Signal period
-   int adxPeriod;              // Chu kỳ ADX
+   int sma50Period;   // Chu kỳ MA Fast
+   int sma200Period;  // Chu kỳ MA Slow
+   int rsiPeriod;     // Chu kỳ RSI
+   int macdFast;      // MACD Fast period
+   int macdSlow;      // MACD Slow period
+   int macdSignal;    // MACD Signal period
+   int adxPeriod;     // Chu kỳ ADX
 
    // ==============================================================
    // STRATEGY PARAMETERS
    // ==============================================================
-   int maxWaitBars;       // Số nến tối đa chờ pullback
-   int atrLength;         // Số nến tính ATR
-   double wickBodyRatio;  // Tỷ lệ Bóng/Thân nến
+   int minTrendBars;        // Số nến tối thiểu để hình thành trend trước khi đảo chiều
+   double sidewayATRRatio;  // Tỷ lệ vùng sideway 2 bên MA theo ATR
+   int maxWaitBars;         // Số nến tối đa chờ pullback
+   int atrLength;           // Số nến tính ATR
+   double wickBodyRatio;    // Tỷ lệ Bóng/Thân nến
+   int srLookback;          // Số nến để kiểm tra S/R Zone
 
    // ==============================================================
-   // FILTER 1: MA SLOPE
+   // FILTER: MA SLOPE
    // Kiểm tra độ dốc MA có đủ mạnh không
    // ==============================================================
    bool enableMASlopeFilter;  // Bật/tắt MA Slope filter
    bool maSlopeCritical;      // Nếu true, fail = critical fail
+   double maSlopeThreshold;   // Góc dốc MA Fast tối thiểu
    double maSlopeWeight;      // Trọng số của MA Slope filter
 
    // ==============================================================
-   // FILTER 2A: STATIC MOMENTUM (RSI + MACD position)
-   // Kiểm tra RSI và MACD có xác nhận xu hướng không
+   // FILTER: RSI MOMENTUM
+   // Kiểm tra RSI có xác nhận xu hướng không
    // ==============================================================
-   bool enableStaticMomentumFilter;  // Bật/tắt Momentum filter
-   bool staticMomentumCritical;      // Nếu true, fail = critical fail
-   double staticMomentumWeight;      // Trọng số của Momentum filter
+   bool enableRSIMomentumFilter;  // Bật/tắt RSI Momentum filter
+   bool rsiMomentumCritical;      // Nếu true, fail = critical fail
+   double rsiMomentumWeight;      // Trọng số của RSI Momentum filter
 
    // ==============================================================
-   // FILTER 2B: RSI REVERSAL DETECTION
+   // FILTER: MACD MOMENTUM
+   // Kiểm tra MACD có xác nhận xu hướng không
+   // ==============================================================
+   bool enableMACDMomentumFilter;  // Bật/tắt MACD Momentum filter
+   bool macdMomentumCritical;      // Nếu true, fail = critical fail
+   double macdMomentumWeight;      // Trọng số của MACD Momentum filter
+
+   // ==============================================================
+   // FILTER: RSI REVERSAL DETECTION
    // Phát hiện RSI đang đi ngược hướng signal (đảo chiều sớm)
    // ==============================================================
    bool enableRSIReversalFilter;  // Bật/tắt RSI Reversal filter
@@ -90,7 +99,7 @@ struct SMAPullbackConfig
    double rsiReversalWeight;      // Trọng số của RSI Reversal filter
 
    // ==============================================================
-   // FILTER 2C: MACD HISTOGRAM TREND
+   // FILTER: MACD HISTOGRAM TREND
    // Phát hiện histogram đang mở rộng ngược hướng signal
    // ==============================================================
    bool enableMACDHistogramFilter;  // Bật/tắt MACD Histogram filter
@@ -99,7 +108,7 @@ struct SMAPullbackConfig
    double macdHistogramWeight;      // Trọng số của MACD Histogram filter
 
    // ==============================================================
-   // FILTER 3: SMA200 TREND
+   // FILTER: SMA200 TREND
    // Kiểm tra giá có cùng xu hướng với SMA200 không
    // ==============================================================
    bool enableSMA200Filter;  // Bật/tắt SMA200 filter
@@ -107,17 +116,16 @@ struct SMAPullbackConfig
    double sma200Weight;      // Trọng số của SMA Slow filter
 
    // ==============================================================
-   // FILTER 4: S/R ZONE
+   // FILTER: S/R ZONE
    // Kiểm tra giá có trong vùng entry tốt không (% từ S đến R)
    // ==============================================================
    bool enableSRZoneFilter;  // Bật/tắt S/R Zone filter
    bool srZoneCritical;      // Nếu true, fail = critical fail
-   int srLookback;           // Số nến để kiểm tra S/R Zone
    double srZonePercent;     // % vùng giá cho phép
    double srZoneWeight;      // Trọng số của S/R Zone filter
 
    // ==============================================================
-   // FILTER 4B: S/R MIN WIDTH
+   // FILTER: S/R MIN WIDTH
    // Lọc vùng S/R quá hẹp (không đủ room cho SL/TP)
    // ==============================================================
    bool enableSRMinWidthFilter;  // Bật/tắt filter độ rộng S/R tối thiểu
@@ -126,19 +134,7 @@ struct SMAPullbackConfig
    double srMinWidthWeight;      // Trọng số của S/R Min Width filter
 
    // ==============================================================
-   // FILTER 5: MA NOISE (Cut Interval, Max Cuts, Peak Distance)
-   // Lọc vùng giá dao động quanh MA50 (choppy market)
-   // ==============================================================
-   int minCutInterval;              // Số nến tối thiểu giữa 2 lần cắt (0=Off)
-   double cutIntervalWeight;        // Trọng số của Cut Interval filter
-   int maxCutsInLookback;           // Số lần cắt tối đa trong lookback (0=Off)
-   int cutsLookbackBars;            // Số nến để kiểm tra Max Cuts
-   double maxCutsWeight;            // Trọng số của Max Cuts filter
-   double peakMaDistanceThreshold;  // Khoảng cách peak-MA tối thiểu (0=Off)
-   double peakMADistWeight;         // Trọng số của Peak-MA Distance filter
-
-   // ==============================================================
-   // FILTER 6: ADX TREND STRENGTH
+   // FILTER: ADX TREND STRENGTH
    // Kiểm tra thị trường có đang trending không
    // ==============================================================
    bool enableADXFilter;           // Bật/tắt ADX filter
@@ -148,7 +144,7 @@ struct SMAPullbackConfig
    double adxWeight;               // Trọng số của ADX filter
 
    // ==============================================================
-   // FILTER 7: BODY/ATR RATIO
+   // FILTER: BODY/ATR RATIO
    // Kiểm tra nến confirm có đủ mạnh không
    // ==============================================================
    bool enableBodyATRFilter;  // Bật/tắt Body/ATR filter
@@ -157,7 +153,7 @@ struct SMAPullbackConfig
    double bodyATRWeight;      // Trọng số của Body/ATR filter
 
    // ==============================================================
-   // FILTER 8: VOLUME CONFIRMATION
+   // FILTER: VOLUME CONFIRMATION
    // Kiểm tra volume có đủ so với trung bình không
    // ==============================================================
    bool enableVolumeFilter;  // Bật/tắt Volume filter
@@ -167,7 +163,7 @@ struct SMAPullbackConfig
    double volumeWeight;      // Trọng số của Volume filter
 
    // ==============================================================
-   // FILTER 9: PRICE-MA DISTANCE
+   // FILTER: PRICE-MA DISTANCE
    // Tránh chase - giá không quá xa MA50
    // ==============================================================
    bool enablePriceMADistanceFilter;  // Bật/tắt Price-MA Distance filter
@@ -176,7 +172,7 @@ struct SMAPullbackConfig
    double priceMADistWeight;          // Trọng số của Price-MA Distance filter
 
    // ==============================================================
-   // FILTER 10: TIME CONTROL (EA only)
+   // FILTER: TIME CONTROL (EA only)
    // Chỉ trade trong giờ tốt
    // ==============================================================
    bool enableTimeFilter;  // Bật/tắt Time filter
@@ -186,7 +182,7 @@ struct SMAPullbackConfig
    double timeWeight;      // Trọng số của Time filter
 
    // ==============================================================
-   // FILTER 11: NEWS FILTER (EA only)
+   // FILTER: NEWS FILTER (EA only)
    // Tránh trade gần tin quan trọng
    // ==============================================================
    bool enableNewsFilter;  // Bật/tắt News filter
@@ -197,7 +193,7 @@ struct SMAPullbackConfig
    double newsWeight;      // Trọng số của News filter
 
    // ==============================================================
-   // FILTER 12: CONSECUTIVE LOSSES (EA only)
+   // FILTER: CONSECUTIVE LOSSES (EA only)
    // Tạm dừng sau chuỗi thua liên tiếp
    // ==============================================================
    bool enableConsecutiveLossFilter;  // Bật/tắt Consecutive Loss filter
@@ -211,146 +207,255 @@ struct SMAPullbackConfig
 
 //+------------------------------------------------------------------+
 //| Xử lý signal khi tìm được pattern hoàn chỉnh                     |
-//| Unify logic từ Filters.mqh và MA_Filters.mqh đề loại bỏ các      |
-//| signal theo config filter.                                       |
+//| Kiểm tra điều kiện của signal dựa theo cấu hình                  |
 //+------------------------------------------------------------------+
 void ProcessSignal(const SMAPullbackConfig& config, bool isBuySignal, int cutIdx, int confirmIdx, string symbol,
                    datetime currentTime, const double& open[], const double& high[], const double& low[],
                    const double& close[], const double& sma50[], const double& sma200[], const double& rsi[],
                    const double& macdMain[], const double& macdSignal[], const long& volume[], const double& adxMain[],
-                   const double& adxPlusDI[], const double& adxMinusDI[], const double& atr[], double tickSize,
-                   double pointValue, SignalResult& outResult)
+                   const double& adxPlusDI[], const double& adxMinusDI[], const double& atr[], int arraySize,
+                   double tickSize, double pointValue, SignalResult& outResult)
 {
    outResult.score = 100;  // Bắt đầu với 100, sẽ trừ dần bằng failScore
    outResult.reasons = "";
    outResult.filterDetails = "";
    outResult.isCriticalFail = false;
    outResult.strength = "NONE";
-   double totalFailScore = 0;  // Track tổng điểm fail
 
-   // 1. Run MA Filters (Cut Interval, Peak-MA, Max Cuts)
-   MAScoringConfig maConfig;
-   maConfig.enableCutIntervalFilter = (config.minCutInterval > 0);
-   maConfig.minCutInterval = config.minCutInterval;
-   maConfig.cutsLookbackBars = config.cutsLookbackBars;
-   maConfig.cutIntervalWeight = config.cutIntervalWeight;
-
-   maConfig.enablePeakMADistFilter = (config.peakMaDistanceThreshold > 0);
-   maConfig.peakMaDistanceThreshold = config.peakMaDistanceThreshold;
-   maConfig.peakMADistWeight = config.peakMADistWeight;
-
-   maConfig.enableMaxCutsFilter = (config.maxCutsInLookback > 0);
-   maConfig.maxCutsInLookback = config.maxCutsInLookback;
-   maConfig.maxCutsWeight = config.maxCutsWeight;
-
-   MAScoringResult maResult;
-
-   RunMAFilters(maConfig, isBuySignal, cutIdx, open, high, low, close, sma50, tickSize, pointValue, ArraySize(high),
-                maResult);
-
-   totalFailScore += maResult.failScore;  // Gộp failScore từ MA filters
-   if (maResult.allReasons != "")
-      outResult.reasons += maResult.allReasons;
-   outResult.filterDetails += maResult.filterDetails;
-
-   // 2. Run Unified Filters
-   UnifiedScoringConfig uniConfig;
-
-   uniConfig.enableMASlopeFilter = config.enableMASlopeFilter;
-   uniConfig.maSlopeCritical = config.maSlopeCritical;
-   uniConfig.maSlopeThreshold = config.ma50SlopeThreshold;
-   uniConfig.slopeSmoothBars = config.slopeSmoothBars;
-   uniConfig.maSlopeWeight = config.maSlopeWeight;
-
-   // Filter 2A: Static Momentum
-   uniConfig.enableStaticMomentumFilter = config.enableStaticMomentumFilter;
-   uniConfig.staticMomentumCritical = config.staticMomentumCritical;
-   uniConfig.staticMomentumWeight = config.staticMomentumWeight;
-
-   // Filter 2B: RSI Reversal
-   uniConfig.enableRSIReversalFilter = config.enableRSIReversalFilter;
-   uniConfig.rsiReversalCritical = config.rsiReversalCritical;
-   uniConfig.rsiReversalLookback = config.rsiReversalLookback;
-   uniConfig.rsiReversalWeight = config.rsiReversalWeight;
-
-   // Filter 2C: MACD Histogram
-   uniConfig.enableMACDHistogramFilter = config.enableMACDHistogramFilter;
-   uniConfig.macdHistogramCritical = config.macdHistogramCritical;
-   uniConfig.macdHistogramLookback = config.macdHistogramLookback;
-   uniConfig.macdHistogramWeight = config.macdHistogramWeight;
-
-   uniConfig.enableSMA200Filter = config.enableSMA200Filter;
-   uniConfig.sma200Critical = config.sma200Critical;
-   uniConfig.sma200Weight = config.sma200Weight;
-
-   uniConfig.enableSRZoneFilter = config.enableSRZoneFilter;
-   uniConfig.srZoneCritical = config.srZoneCritical;
-   uniConfig.srZonePercent = config.srZonePercent;
-   uniConfig.srZoneWeight = config.srZoneWeight;
-   uniConfig.srLookback = config.srLookback;
-
-   uniConfig.enableSRMinWidthFilter = config.enableSRMinWidthFilter;
-   uniConfig.srMinWidthCritical = config.srMinWidthCritical;
-   uniConfig.minSRWidthATR = config.minSRWidthATR;
-   uniConfig.srMinWidthWeight = config.srMinWidthWeight;
-
-   uniConfig.enableADXFilter = config.enableADXFilter;
-   uniConfig.adxCritical = config.adxCritical;
-   uniConfig.minADXThreshold = config.minADXThreshold;
-   uniConfig.useADXDirectionalConfirm = config.useADXDirectionalConfirm;
-   uniConfig.adxWeight = config.adxWeight;
-
-   uniConfig.enableBodyATRFilter = config.enableBodyATRFilter;
-   uniConfig.bodyATRCritical = config.bodyATRCritical;
-   uniConfig.minBodyATRRatio = config.minBodyATRRatio;
-   uniConfig.atrLength = config.atrLength;
-   uniConfig.bodyATRWeight = config.bodyATRWeight;
-
-   uniConfig.enableVolumeFilter = config.enableVolumeFilter;
-   uniConfig.volumeCritical = config.volumeCritical;
-   uniConfig.volumeAvgPeriod = config.volumeAvgPeriod;
-   uniConfig.minVolumeRatio = config.minVolumeRatio;
-   uniConfig.volumeWeight = config.volumeWeight;
-
-   uniConfig.enablePriceMADistFilter = config.enablePriceMADistanceFilter;
-   uniConfig.priceMADistCritical = config.priceMADistCritical;
-   uniConfig.maxPriceMADistATR = config.maxPriceMADistanceATR;
-   uniConfig.priceMADistWeight = config.priceMADistWeight;
-
-   uniConfig.enableTimeFilter = config.enableTimeFilter;
-   uniConfig.timeCritical = config.timeCritical;
-   uniConfig.tradeStartHour = config.tradeStartHour;
-   uniConfig.tradeEndHour = config.tradeEndHour;
-   uniConfig.timeWeight = config.timeWeight;
-
-   uniConfig.enableNewsFilter = config.enableNewsFilter;
-   uniConfig.newsCritical = config.newsCritical;
-   uniConfig.newsMinutesBefore = config.newsMinutesBefore;
-   uniConfig.newsMinutesAfter = config.newsMinutesAfter;
-   uniConfig.newsMinImportance = config.newsMinImportance;
-   uniConfig.newsWeight = config.newsWeight;
-
-   uniConfig.minScoreToPass = config.minScoreToPass;
-
-   UnifiedScoringResult scoringResult;
-   RunUnifiedScoringFilters(uniConfig, isBuySignal, confirmIdx, symbol, currentTime, open, high, low, close, sma50,
-                            sma200, rsi, macdMain, macdSignal, volume, adxMain, adxPlusDI, adxMinusDI, atr, tickSize,
-                            pointValue, ArraySize(high), scoringResult);
-
-   totalFailScore += scoringResult.failScore;  // Gộp failScore từ Unified filters
-   outResult.reasons += scoringResult.allReasons;
-   outResult.filterDetails += scoringResult.filterDetails;
-
-   // Tính điểm cuối cùng = 100 - totalFailScore
-   outResult.score = outResult.score - totalFailScore;
-
-   double localSupport = scoringResult.support;
-   double localResistance = scoringResult.resistance;
-
-   if (scoringResult.hasCriticalFail)
+   CalculateSupportResistance(high, low, arraySize, confirmIdx, config.srLookback, outResult.support,
+                              outResult.resistance);
+   if (outResult.support < 0 || outResult.resistance < 0 || outResult.support > outResult.resistance)
    {
       outResult.isCriticalFail = true;
+      outResult.reasons += "- S/R Zone không hợp lệ\n";
+      outResult.score = 0;
       return;
+   }
+
+   ScoringFilterResult filterResult;
+
+   // Kiểm tra MA Slope
+   if (config.enableMASlopeFilter)
+   {
+      filterResult = CheckMASlope(confirmIdx, sma50, arraySize, config.maSlopeThreshold, cutIdx - confirmIdx + 1,
+                                  config.maSlopeWeight);
+      if (!filterResult.passed)
+      {
+         outResult.score += filterResult.score;
+         if (filterResult.reason != "")
+            outResult.reasons += "- " + filterResult.reason + "\n";
+         outResult.isCriticalFail = outResult.isCriticalFail || config.maSlopeCritical;
+      }
+      outResult.filterDetails += StringFormat("- [%s] MA Slope: %.5f (th=%.5f)\n", filterResult.passed ? "✓" : "✗",
+                                              filterResult.value, config.maSlopeThreshold);
+   }
+
+   // Kiểm tra RSI Momentum
+   if (config.enableRSIMomentumFilter)
+   {
+      filterResult = CheckRSIMomentum(isBuySignal, confirmIdx, rsi, config.rsiMomentumWeight);
+      if (!filterResult.passed)
+      {
+         outResult.score += filterResult.score;
+         if (filterResult.reason != "")
+            outResult.reasons += "- " + filterResult.reason + "\n";
+         outResult.isCriticalFail = outResult.isCriticalFail || config.rsiMomentumCritical;
+      }
+      outResult.filterDetails +=
+          StringFormat("- [%s] RSI Momentum: %.2f\n", filterResult.passed ? "✓" : "✗", filterResult.value);
+   }
+
+   // Kiểm tra MACD Momentum
+   if (config.enableMACDMomentumFilter)
+   {
+      filterResult = CheckMACDMomentum(isBuySignal, confirmIdx, macdMain, macdSignal, config.macdMomentumWeight);
+      if (!filterResult.passed)
+      {
+         outResult.score += filterResult.score;
+         if (filterResult.reason != "")
+            outResult.reasons += "- " + filterResult.reason + "\n";
+         outResult.isCriticalFail = outResult.isCriticalFail || config.macdMomentumCritical;
+      }
+      outResult.filterDetails +=
+          StringFormat("- [%s] MACD Momentum: %.4f\n", filterResult.passed ? "✓" : "✗", filterResult.value);
+   }
+
+   // Kiểm tra RSI Reversal
+   if (config.enableRSIReversalFilter)
+   {
+      filterResult = CheckRSIReversal(isBuySignal, confirmIdx, rsi, arraySize, config.rsiReversalLookback,
+                                      config.rsiReversalWeight);
+      if (!filterResult.passed)
+      {
+         outResult.score += filterResult.score;
+         if (filterResult.reason != "")
+            outResult.reasons += "- " + filterResult.reason + "\n";
+         outResult.isCriticalFail = outResult.isCriticalFail || config.rsiReversalCritical;
+      }
+      outResult.filterDetails +=
+          StringFormat("- [%s] RSI Reversal: delta=%.1f\n", filterResult.passed ? "✓" : "✗", filterResult.value);
+   }
+
+   // Kiểm tra MACD Histogram
+   if (config.enableMACDHistogramFilter)
+   {
+      filterResult = CheckMACDHistogram(isBuySignal, confirmIdx, macdMain, macdSignal, arraySize,
+                                        config.macdHistogramLookback, config.macdHistogramWeight);
+      if (!filterResult.passed)
+      {
+         outResult.score += filterResult.score;
+         if (filterResult.reason != "")
+            outResult.reasons += "- " + filterResult.reason + "\n";
+         outResult.isCriticalFail = outResult.isCriticalFail || config.macdHistogramCritical;
+      }
+      outResult.filterDetails +=
+          StringFormat("- [%s] MACD Histogram: delta=%.5f\n", filterResult.passed ? "✓" : "✗", filterResult.value);
+   }
+
+   // Kiểm tra MA200 trend
+   if (config.enableSMA200Filter)
+   {
+      filterResult = CheckMATrend(isBuySignal, confirmIdx, close, sma200, tickSize, config.sma200Weight);
+      if (!filterResult.passed)
+      {
+         outResult.score += filterResult.score;
+         if (filterResult.reason != "")
+            outResult.reasons += "- " + filterResult.reason + "\n";
+         outResult.isCriticalFail = outResult.isCriticalFail || config.sma200Critical;
+      }
+      outResult.filterDetails +=
+          StringFormat("- [%s] MA Slow Trend: diff=%.5f\n", filterResult.passed ? "✓" : "✗", filterResult.value);
+   }
+
+   // Kiểm tra vùng S/R
+   if (config.enableSRZoneFilter)
+   {
+      filterResult = CheckSRZone(isBuySignal, confirmIdx, close, outResult.support, outResult.resistance,
+                                 config.srZonePercent, config.srZoneWeight);
+      if (!filterResult.passed)
+      {
+         outResult.score += filterResult.score;
+         if (filterResult.reason != "")
+            outResult.reasons += "- " + filterResult.reason + "\n";
+         outResult.isCriticalFail = outResult.isCriticalFail || config.srZoneCritical;
+      }
+      outResult.filterDetails +=
+          StringFormat("- [%s] S/R Zone: S=%.5f, R=%.5f, lim=%.5f\n", filterResult.passed ? "✓" : "✗",
+                       outResult.support, outResult.resistance, filterResult.value);
+   }
+
+   // Kiểm tra min width vùng S/R
+   if (config.enableSRMinWidthFilter)
+   {
+      filterResult = CheckSRMinWidth(confirmIdx, atr, outResult.support, outResult.resistance, config.minSRWidthATR,
+                                     config.srMinWidthWeight);
+      if (!filterResult.passed)
+      {
+         outResult.score += filterResult.score;
+         if (filterResult.reason != "")
+            outResult.reasons += "- " + filterResult.reason + "\n";
+         outResult.isCriticalFail = outResult.isCriticalFail || config.srMinWidthCritical;
+      }
+      outResult.filterDetails +=
+          StringFormat("- [%s] S/R Width: %.1f ATR (min=%.1f)\n", filterResult.passed ? "✓" : "✗", filterResult.value,
+                       config.minSRWidthATR);
+   }
+
+   // Kiểm tra ADX
+   if (config.enableADXFilter)
+   {
+      filterResult = CheckADX(isBuySignal, confirmIdx, adxMain, adxPlusDI, adxMinusDI, config.minADXThreshold,
+                              config.useADXDirectionalConfirm, config.adxWeight);
+      if (!filterResult.passed)
+      {
+         outResult.score += filterResult.score;
+         if (filterResult.reason != "")
+            outResult.reasons += "- " + filterResult.reason + "\n";
+         outResult.isCriticalFail = outResult.isCriticalFail || config.adxCritical;
+      }
+      outResult.filterDetails +=
+          StringFormat("- [%s] ADX: %.1f (+DI=%.1f, -DI=%.1f)\n", filterResult.passed ? "✓" : "✗", adxMain[confirmIdx],
+                       adxPlusDI[confirmIdx], adxMinusDI[confirmIdx]);
+   }
+
+   // Kiểm tra tỷ lệ body / ATR
+   if (config.enableBodyATRFilter)
+   {
+      filterResult =
+          CheckBodyATR(isBuySignal, confirmIdx, open, close, atr, config.minBodyATRRatio, config.bodyATRWeight);
+      if (!filterResult.passed)
+      {
+         outResult.score += filterResult.score;
+         if (filterResult.reason != "")
+            outResult.reasons += "- " + filterResult.reason + "\n";
+         outResult.isCriticalFail = outResult.isCriticalFail || config.bodyATRCritical;
+      }
+      outResult.filterDetails += StringFormat("- [%s] Body/ATR: %.3f (min=%.3f)\n", filterResult.passed ? "✓" : "✗",
+                                              filterResult.value, config.minBodyATRRatio);
+   }
+
+   // Kiểm tra volume
+   if (config.enableVolumeFilter)
+   {
+      filterResult = CheckVolume(confirmIdx, volume, arraySize, config.volumeAvgPeriod, config.minVolumeRatio,
+                                 config.volumeWeight);
+      if (!filterResult.passed)
+      {
+         outResult.score += filterResult.score;
+         if (filterResult.reason != "")
+            outResult.reasons += "- " + filterResult.reason + "\n";
+         outResult.isCriticalFail = outResult.isCriticalFail || config.volumeCritical;
+      }
+      outResult.filterDetails += StringFormat("- [%s] Volume: %.2fx (min=%.2fx)\n", filterResult.passed ? "✓" : "✗",
+                                              filterResult.value, config.minVolumeRatio);
+   }
+
+   // Kiểm tra chênh lệch giá và MA
+   if (config.enablePriceMADistanceFilter)
+   {
+      filterResult = CheckPriceMADist(confirmIdx, close, sma50, atr, arraySize, config.maxPriceMADistanceATR,
+                                      config.priceMADistWeight);
+      if (!filterResult.passed)
+      {
+         outResult.score += filterResult.score;
+         if (filterResult.reason != "")
+            outResult.reasons += "- " + filterResult.reason + "\n";
+         outResult.isCriticalFail = outResult.isCriticalFail || config.priceMADistCritical;
+      }
+      outResult.filterDetails += StringFormat("- [%s] Price-MA: %.2f ATR (max=%.2f)\n", filterResult.passed ? "✓" : "✗",
+                                              filterResult.value, config.maxPriceMADistanceATR);
+   }
+
+   // Kiểm tra time
+   if (config.enableTimeFilter)
+   {
+      filterResult = CheckTime(currentTime, config.tradeStartHour, config.tradeEndHour, config.timeWeight);
+      if (!filterResult.passed)
+      {
+         outResult.score += filterResult.score;
+         if (filterResult.reason != "")
+            outResult.reasons += "- " + filterResult.reason + "\n";
+         outResult.isCriticalFail = outResult.isCriticalFail || config.timeCritical;
+      }
+      outResult.filterDetails += StringFormat("- [%s] Time: hour=%.0f (%d-%d)\n", filterResult.passed ? "✓" : "✗",
+                                              filterResult.value, config.tradeStartHour, config.tradeEndHour);
+   }
+
+   // Kiểm tra tin tức
+   if (config.enableNewsFilter)
+   {
+      filterResult = CheckNews(symbol, currentTime, config.newsMinutesBefore, config.newsMinutesAfter,
+                               config.newsMinImportance, config.newsWeight);
+      if (!filterResult.passed)
+      {
+         outResult.score += filterResult.score;
+         if (filterResult.reason != "")
+            outResult.reasons += "- " + filterResult.reason + "\n";
+         outResult.isCriticalFail = outResult.isCriticalFail || config.newsCritical;
+      }
+      outResult.filterDetails +=
+          StringFormat("- [%s] News: %d-%d min before/after, importance=%d\n", filterResult.passed ? "✓" : "✗",
+                       config.newsMinutesBefore, config.newsMinutesAfter, config.newsMinImportance);
    }
 
    // Check if passed min score threshold
@@ -378,7 +483,7 @@ void ProcessSignal(const SMAPullbackConfig& config, bool isBuySignal, int cutIdx
    if (isBuySignal)
    {
       // BUY: SL dưới support - trừ thêm buffer % để an toàn hơn
-      double baseSupport = MathMin(MathMin(localSupport, sma50[confirmIdx]), sma200[confirmIdx]);
+      double baseSupport = MathMin(MathMin(outResult.support, sma50[confirmIdx]), sma200[confirmIdx]);
       double srBuffer = (entry - baseSupport) * config.srBufferPercent / 100.0;
       sl = baseSupport - srBuffer;
       risk = entry - sl;
@@ -386,7 +491,7 @@ void ProcessSignal(const SMAPullbackConfig& config, bool isBuySignal, int cutIdx
    else
    {
       // SELL: SL trên resistance - cộng thêm buffer % để an toàn hơn
-      double baseResistance = MathMax(MathMax(localResistance, sma50[confirmIdx]), sma200[confirmIdx]);
+      double baseResistance = MathMax(MathMax(outResult.resistance, sma50[confirmIdx]), sma200[confirmIdx]);
       double srBuffer = (baseResistance - entry) * config.srBufferPercent / 100.0;
       sl = baseResistance + srBuffer;
       risk = sl - entry;
@@ -407,8 +512,8 @@ void ProcessSignal(const SMAPullbackConfig& config, bool isBuySignal, int cutIdx
    if (isBuySignal)
    {
       // BUY: TP dưới resistance - trừ buffer % để an toàn hơn
-      double tpBuffer = (localResistance - entry) * config.srBufferPercent / 100.0;
-      double tpResistance = localResistance - tpBuffer;
+      double tpBuffer = (outResult.resistance - entry) * config.srBufferPercent / 100.0;
+      double tpResistance = outResult.resistance - tpBuffer;
       tp = MathMin(entry + risk, tpResistance);
       for (double j = 1.1; j <= config.maxRiskRewardRate; j += 0.1)
       {
@@ -422,8 +527,8 @@ void ProcessSignal(const SMAPullbackConfig& config, bool isBuySignal, int cutIdx
    else
    {
       // SELL: TP trên support - cộng buffer % để an toàn hơn
-      double tpBuffer = (entry - localSupport) * config.srBufferPercent / 100.0;
-      double tpSupport = localSupport + tpBuffer;
+      double tpBuffer = (entry - outResult.support) * config.srBufferPercent / 100.0;
+      double tpSupport = outResult.support + tpBuffer;
       tp = MathMax(entry - risk, tpSupport);
       for (double j = 1.1; j <= config.maxRiskRewardRate; j += 0.1)
       {
@@ -438,8 +543,6 @@ void ProcessSignal(const SMAPullbackConfig& config, bool isBuySignal, int cutIdx
    outResult.entry = entry;
    outResult.sl = sl;
    outResult.tp = tp;
-   outResult.resistance = localResistance;
-   outResult.support = localSupport;
 
    // Validate Entry/SL/TP bằng hàm chung
    int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
@@ -461,131 +564,253 @@ void ProcessSignal(const SMAPullbackConfig& config, bool isBuySignal, int cutIdx
 
 struct ScanResult
 {
-   bool found;
-   bool cancelled;
-   int confirmIdx;
-   bool isBuy;
-   SignalResult signal;
-   string cancelReason;
+   // Signal có thể hợp lệ hoặc không cho dù cutFound = true
+   // cutFound = true, cancelled = false  : có điểm cắt và signal hợp lệ
+   // cutFound = true, cancelled = true   : có điểm cắt nhưng signal không hợp lệ
+   // cutFound = false, cancelled = true  : tìm được điểm cắt nhưng không hợp lệ
+   // cutFound = false, cancelled = false : vẫn đang tìm điểm cắt nhưng đã kết thúc nến
+   // Nếu tìm được điểm cắt nhưng không hợp lệ: found = false, cancelled = true
+   bool cancelled;         // Thông báo việc scan signal thất bại
+   bool cutFound;          // Thông báo tìm thấy điểm cắt
+   int cutIdx;             // Idx nến cắt (có khả năng khởi tạo signal)
+   datetime cutTime;       // Thời gian của nến cắt
+   int confirmIdx;         // Idx nến xác nhận signal
+   datetime confirmTime;   // Thời gian của nến xác nhận
+   string confirmPattern;  // Pattern của nến xác nhận
+   bool isBuy;             // Lệnh BUY hay SELL
+   SignalResult signal;    // Chi tiết signal
+   string cancelReason;    // Lý do nếu signal bị hủy
+   // Sau khi kết thúc lần scan, thông tin nến hiện tại đang dừng lại sẽ trả về trong tham chiếu sau
+   // Lần scan kế tiếp sẽ bắt đầu từ nến mới hơn endIdx
+   int startIdx;        // Idx nến bắt đầu scan
+   datetime startTime;  // Thời gian của nến bắt đầu scan
+   int endIdx;          // Idx nến kết thúc sau khi scan
+   datetime endTime;    // Thời gian của nến kết thúc sau khi scan
 };
 
 //+------------------------------------------------------------------+
-//| Scan for trading signal from a cut candle                        |
+//| Scan for trading signal from a startIdx candle                   |
 //+------------------------------------------------------------------+
-void ScanForSignal(const SMAPullbackConfig& config, int cutIdx,
-                   bool cutUpToBottom,  // true = potential BUY, false = potential SELL
-                   string symbol, datetime currentTime, const double& open[], const double& high[], const double& low[],
+void ScanForSignal(const SMAPullbackConfig& config, string symbol, datetime currentTime, int startIdx,
+                   const datetime& time[], const double& open[], const double& high[], const double& low[],
                    const double& close[], const double& sma50[], const double& sma200[], const double& rsi[],
                    const double& macdMain[], const double& macdSignal[], const long& volume[], const double& adxMain[],
                    const double& adxPlusDI[], const double& adxMinusDI[], const double& atr[], double tickSize,
-                   double pointValue, int copyCount, ScanResult& outResult)
+                   double pointValue, int arraySize, ScanResult& outResult)
 {
-   outResult.found = false;
    outResult.cancelled = false;
+   outResult.cutFound = false;
+   outResult.cutIdx = -1;
    outResult.confirmIdx = -1;
-   outResult.isBuy = cutUpToBottom;
+   outResult.confirmPattern = "";
+   outResult.isBuy = true;
    outResult.cancelReason = "";
+   outResult.startIdx = startIdx;
+   outResult.startTime = time[startIdx];
+   outResult.endIdx = -1;
 
-   double sidewayUpper = sma50[cutIdx] + atr[cutIdx] * 2;
-   double sidewayLower = sma50[cutIdx] - atr[cutIdx] * 2;
-
-   // Scan các nến sau nến cắt (Tương lai = index nhỏ hơn)
-   // Từ cutIdx-1 lùi về cutIdx - WaitBars
-   int stopScanIdx = MathMax(1, cutIdx - config.maxWaitBars);
-
-   for (int k = cutIdx - 1; k >= stopScanIdx; k--)
+   // Scan từng nến để theo dõi biến động giá, xác định dấu hiệu signal
+   int idx = startIdx;
+   int trend = 0;               // 0: = MA; 1: >MA, -1: <MA
+   int trendBuyBarsCount = 0;   // Số nến tăng trong trend
+   int trendSellBarsCount = 0;  // Số nến giảm trong trend
+   int trendPeakIdx = -1;       // Idx của đỉnh / đáy trend
+   while (idx >= 1)             // Chỉ scan đến nến đóng hoàn thiện gần nhất (nến 0 là nến đang chạy)
    {
-      // Kiểm tra xem nến có vượt quá vùng sideway không
-      if (close[k] < sidewayLower || close[k] > sidewayUpper)
+      int barTrend = 0;
+      if (IsGreaterThan(close[idx], sma50[idx], tickSize))
       {
-         outResult.cancelled = true;
-         outResult.confirmIdx = k;
-         outResult.cancelReason =
-             StringFormat("Giá vượt Sideway: Close = %.5f, Lo = %.5f, Up = %.5f", close[k], sidewayLower, sidewayUpper);
-         return;
+         barTrend = 1;
       }
-
-      if (cutUpToBottom)
+      else if (IsLessThan(close[idx], sma50[idx], tickSize))
       {
-         // Đang theo dõi BUY - Nếu giá đóng cửa nến không trên SMA thì skip
-         if (!IsGreaterThan(close[k], sma50[k], tickSize))
-            continue;
+         barTrend = -1;
+      }
+      bool isBuyBar = close[idx] > open[idx];
+      bool isSellBar = close[idx] < open[idx];
+
+      if (trend == 0)
+      {
+         // Chỉ kiểm tra trend lần đầu khi chưa xác định
+         trend = barTrend;
+         trendPeakIdx = idx;
+         outResult.startIdx = idx;
+         outResult.startTime = time[idx];
+         --idx;
+         // Tiếp tục nến tiếp theo
+         continue;
       }
       else
       {
-         // Đang theo dõi SELL - Nếu giá đóng cửa nến không dưới SMA thì skip
-         if (!IsLessThan(close[k], sma50[k], tickSize))
+         // Đềm nến tăng, giảm
+         if (isBuyBar)
+            ++trendBuyBarsCount;
+         if (isSellBar)
+            ++trendSellBarsCount;
+
+         if (trend == 1 && close[trendPeakIdx] < close[idx])
+            // Lấy đỉnh nến
+            trendPeakIdx = idx;
+         else if (trend == -1 && close[trendPeakIdx] > close[idx])
+            // Lấy đáy nến
+            trendPeakIdx = idx;
+
+         if (barTrend != 0 && trend != barTrend)
+         {
+            outResult.isBuy = trend == 1;
+            // Trend đảo chiều (trend != barTrend)
+            // Kiểm tra điều kiện để xác nhận điểm cắt
+            string cutReason =
+                CheckCutSignal(config, outResult.isBuy, trendBuyBarsCount, trendSellBarsCount,
+                               close[outResult.startIdx], close[trendPeakIdx], sma50[trendPeakIdx], atr[trendPeakIdx]);
+            if (cutReason != "")
+            {
+               // Không phải điểm cắt hợp lệ thì break scan tại nến trước đó để vòng scan tiếp theo bắt đầu xử lý từ nến
+               // cắt này
+               outResult.cutFound = false;
+               outResult.cancelled = true;
+               outResult.endIdx = idx + 1;
+               outResult.endTime = time[idx + 1];
+               outResult.cancelReason = cutReason;
+               return;
+            }
+            // Nếu là điểm cắt hợp lệ thì lưu kết quả và tiếp tục vòng lặp để xác nhận signal
+            outResult.cutFound = true;
+            outResult.cutIdx = idx;
+            outResult.cutTime = time[idx];
+            outResult.endIdx = idx;  // Điểm kết thúc là tại điểm cắt detect được để bỏ qua nó trong lần scan tiếp theo
+            outResult.endTime = time[idx];
+            --idx;
+         }
+         else
+         {
+            --idx;
+            // Tiếp tục nến tiếp theo
             continue;
+         }
       }
 
-      // Kiểm tra pattern
-      string buyPatternName = DetectBuyPattern(k, cutIdx, open, high, low, close, sma50, config.wickBodyRatio);
-      string sellPatternName = DetectSellPattern(k, cutIdx, open, high, low, close, sma50, config.wickBodyRatio);
-      string patternName = "";
-
-      if (cutUpToBottom)
+      // Scan các nến sau nến cắt, tối đa WaitBars nến, để tìm điểm hồi
+      // Sau thời điểm này, cutFound = true
+      for (int k = 0; k < config.maxWaitBars; k++)
       {
-         // Đang theo dõi BUY nhưng phát hiện SELL pattern
-         if (sellPatternName != "")
+         double sidewayUpper = sma50[idx] + atr[idx] * config.sidewayATRRatio;
+         double sidewayLower = sma50[idx] - atr[idx] * config.sidewayATRRatio;
+
+         // Kiểm tra xem nến có vượt quá vùng sideway không
+         if (close[idx] < sidewayLower || close[idx] > sidewayUpper)
          {
             outResult.cancelled = true;
-            outResult.confirmIdx = k;
-            outResult.cancelReason = StringFormat("Gặp mô hình giảm: %s", sellPatternName);
+            outResult.confirmIdx = idx;
+            outResult.confirmTime = time[idx];
+            outResult.cancelReason = StringFormat("Giá vượt Sideway: Close = %.5f, Lo = %.5f, Up = %.5f", close[idx],
+                                                  sidewayLower, sidewayUpper);
             return;
          }
-         patternName = buyPatternName;
-      }
-      else
-      {
-         // Đang theo dõi SELL nhưng phát hiện BUY pattern
-         if (buyPatternName != "")
+
+         // Kiểm tra pattern
+         string buyPatternName =
+             DetectBuyPattern(idx, outResult.cutIdx, open, high, low, close, sma50, config.wickBodyRatio);
+         string sellPatternName =
+             DetectSellPattern(idx, outResult.cutIdx, open, high, low, close, sma50, config.wickBodyRatio);
+         string patternName = "";
+
+         if (outResult.isBuy)
          {
-            outResult.cancelled = true;
-            outResult.confirmIdx = k;
-            outResult.cancelReason = StringFormat("Gặp mô hình tăng: %s", buyPatternName);
-            return;
+            // Đang theo dõi BUY nhưng phát hiện SELL pattern
+            if (sellPatternName != "")
+            {
+               outResult.cancelled = true;
+               outResult.confirmIdx = idx;
+               outResult.confirmTime = time[idx];
+               outResult.cancelReason = StringFormat("Gặp mô hình giảm: %s", sellPatternName);
+               return;
+            }
+            patternName = buyPatternName;
          }
-         patternName = sellPatternName;
-      }
-
-      if (patternName != "")
-      {
-         outResult.confirmIdx = k;
-
-         // Tiến hành kiểm tra điều kiện signal
-         SignalResult result;
-         ProcessSignal(config, cutUpToBottom, cutIdx, k, symbol, currentTime, open, high, low, close, sma50, sma200,
-                       rsi, macdMain, macdSignal, volume, adxMain, adxPlusDI, adxMinusDI, atr, tickSize, pointValue,
-                       result);
-
-         if (!result.isCriticalFail)
+         else
          {
-            outResult.found = true;
-            outResult.signal = result;
-            return;
+            // Đang theo dõi SELL nhưng phát hiện BUY pattern
+            if (buyPatternName != "")
+            {
+               outResult.cancelled = true;
+               outResult.confirmIdx = idx;
+               outResult.confirmTime = time[idx];
+               outResult.cancelReason = StringFormat("Gặp mô hình tăng: %s", buyPatternName);
+               return;
+            }
+            patternName = sellPatternName;
          }
-         // Nếu Critical Fail, continue loop để tiếp tục tìm pattern khác
-      }
-   }
 
-   // Quan trọng: Sau khi scan xong khoảng WaitBars
-   // Nếu đã tìm thấy signal -> Cấm tìm nến cắt mới trong vùng ảnh hưởng của signal này
-   // Nếu scan hết mà không thấy signal nào -> Vẫn cho phép tìm nến cắt mới (vì setup này coi như fail hoàn toàn)
-   // Chỉ đánh dấu cancel khi đã thực sự quét đủ số nến (maxWaitBars)
-   // Nếu chưa đủ nến để quét (ví dụ nến cắt vừa xuất hiện), thì không cancel, chờ thêm nến
-   int actualBarsScanned = cutIdx - stopScanIdx;  // Số nến thực sự đã quét
+         if (patternName != "")
+         {
+            outResult.confirmIdx = idx;
+            outResult.confirmTime = time[idx];
 
-   if (!outResult.found && !outResult.cancelled)
-   {
-      // Chỉ cancel khi đã quét đủ số nến theo config
-      if (actualBarsScanned >= config.maxWaitBars)  // Số nến cần quét
-      {
-         outResult.cancelled = true;
-         outResult.confirmIdx = stopScanIdx;
-         outResult.cancelReason = "Không pattern";
+            // Tiến hành kiểm tra điều kiện signal
+            SignalResult result;
+            ProcessSignal(config, outResult.isBuy, outResult.cutIdx, idx, symbol, currentTime, open, high, low, close,
+                          sma50, sma200, rsi, macdMain, macdSignal, volume, adxMain, adxPlusDI, adxMinusDI, atr,
+                          arraySize, tickSize, pointValue, result);
+
+            if (!result.isCriticalFail)
+            {
+               // Tìm thấy signal hợp lệ, kết thúc scan, trả về kết quả
+               outResult.signal = result;
+               outResult.confirmIdx = idx;
+               outResult.confirmTime = time[idx];
+               outResult.confirmPattern = patternName;
+               outResult.endIdx = idx;
+               outResult.endTime = time[idx];
+               return;
+            }
+         }
+
+         // Tiếp tục nến mới
+         --idx;
+         if (idx < 1)
+         {
+            break;
+         }
       }
-      // Nếu chưa đủ nến, không làm gì - pending cho lần scan tiếp theo
+
+      // Sau WaitBars nến vẫn không nhận diện được tín hiệu, trả về lỗi hủy với vị trí quét từ nến cắt cho lần quét kế
+      // tiếp vị trí đã set trước đó nên không cần thay đổi, lý do hủy là "Không nhận diện được signal"
+      outResult.cancelled = true;
+      outResult.confirmIdx = idx;
+      outResult.confirmTime = time[idx];
+      outResult.cancelReason = "- Không nhận diện được signal";
+      return;
    }
 }
 
-#endif  // SMA_PULLBACK_CORE_H
+// Kiểm tra điều kiện cắt
+string CheckCutSignal(const SMAPullbackConfig& config, bool isBuyTrend, int buyBarCount, int sellBarCount,
+                      double startPrice, double peakPrice, double maAtPeak, double atrAtPeak)
+{
+   if (buyBarCount + sellBarCount < config.minTrendBars)
+      return StringFormat("Không đủ nến để tạo xu hướng, min %d nến", config.minTrendBars);
+
+   if (isBuyTrend)
+   {
+      // if (maAtPeak < startPrice)
+      //    return StringFormat("MA tại đỉnh thấp hơn giá bắt đầu, MA = %.5f < Start = %.5f", maAtPeak, startPrice);
+      if (peakPrice - maAtPeak <= config.sidewayATRRatio * atrAtPeak)
+         return StringFormat(
+             "Đỉnh nến chưa vượt qua vùng sideway của MA, Peak = %.5f, MA = %.5f, ATR = %.5f, Ratio = %.2f", peakPrice,
+             maAtPeak, atrAtPeak, config.sidewayATRRatio);
+   }
+   else
+   {
+      // if (maAtPeak > startPrice)
+      //    return StringFormat("MA tại đáy cao hơn giá bắt đầu, MA = %.5f > Start = %.5f", maAtPeak, startPrice);
+      if (maAtPeak - peakPrice <= config.sidewayATRRatio * atrAtPeak)
+         return StringFormat(
+             "Đáy nến chưa vượt qua vùng sideway của MA, Peak = %.5f, MA = %.5f, ATR = %.5f, Ratio = %.2f", peakPrice,
+             maAtPeak, atrAtPeak, config.sidewayATRRatio);
+   }
+
+   return "";
+}
+
+#endif  // MA_PULLBACK_CORE_H
