@@ -415,7 +415,6 @@ void PrintFiltersStatus()
 // ==================================================
 void OnDeinit(const int reason)
 {
-   Comment("");  // Xóa comment box
    IndicatorRelease(hSMA50);
    IndicatorRelease(hSMA200);
    IndicatorRelease(hRSI);
@@ -430,6 +429,7 @@ void OnDeinit(const int reason)
    if (InpEnableDrawSignal && !keepMarkers)
    {
       DeleteAllSignalObjects(EA_OBJ_PREFIX);
+      HideTooltipLabel();
       ClearSignalTooltips(EA_OBJ_PREFIX);
    }
 

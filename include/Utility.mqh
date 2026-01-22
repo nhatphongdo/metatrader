@@ -331,6 +331,136 @@ void DeleteAllSignalObjects(string objPrefix)
    ObjectsDeleteAll(0, objPrefix);
 }
 
+// Tên label tooltip cố định
+#define TOOLTIP_LABEL_NAME "SIGNAL_TOOLTIP_LABEL"
+
+// Giới hạn ký tự tối đa cho mỗi label (MT5 limit là 63)
+#define TOOLTIP_MAX_LABEL_CHARS 63
+
+//+------------------------------------------------------------------+
+//| Helper: Tạo một label segment                                    |
+//+------------------------------------------------------------------+
+void CreateTooltipLabelSegment(string labelName, string labelText, int xDist, int yDist, int textColor, int fontSize)
+{
+   ObjectCreate(0, labelName, OBJ_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, labelName, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, labelName, OBJPROP_ANCHOR, ANCHOR_LEFT_UPPER);
+   ObjectSetInteger(0, labelName, OBJPROP_XDISTANCE, xDist);
+   ObjectSetInteger(0, labelName, OBJPROP_YDISTANCE, yDist);
+   ObjectSetInteger(0, labelName, OBJPROP_COLOR, textColor);
+   ObjectSetInteger(0, labelName, OBJPROP_FONTSIZE, fontSize);
+   ObjectSetString(0, labelName, OBJPROP_FONT, "Consolas");
+   ObjectSetString(0, labelName, OBJPROP_TEXT, labelText);
+   ObjectSetInteger(0, labelName, OBJPROP_BACK, false);
+   ObjectSetInteger(0, labelName, OBJPROP_SELECTABLE, false);
+}
+
+//+------------------------------------------------------------------+
+//| Hiển thị tooltip bằng custom label (hỗ trợ multi-line)           |
+//| Tự động chia nhỏ dòng dài hơn 63 ký tự thành nhiều label ngang   |
+//+------------------------------------------------------------------+
+void ShowTooltipLabel(string text, int textColor = clrYellow, int fontSize = 12)
+{
+   // Xóa tất cả label cũ
+   ObjectsDeleteAll(0, TOOLTIP_LABEL_NAME);
+
+   if (text == "")
+      return;
+
+   // Tách text thành các dòng
+   string lines[];
+   int lineCount = StringSplit(text, '\n', lines);
+   if (lineCount <= 0)
+      return;
+
+   // Khoảng cách giữa các dòng (dựa trên font size)
+   int lineHeight = (int)(fontSize * 1.7);
+   int startY = 10;
+   int startX = 10;
+
+   int labelCount = 0;
+
+   // Tạo label cho từng dòng
+   for (int i = 0; i < lineCount; i++)
+   {
+      string lineText = lines[i];
+
+      // Bỏ qua dòng trống
+      StringTrimRight(lineText);
+      StringTrimLeft(lineText);
+      int lineLen = StringLen(lineText);
+      if (lineLen == 0)
+         continue;
+
+      int yPos = startY + i * lineHeight;
+
+      // Chia thành nhiều label ngang
+      int segmentCount = (int)MathCeil((double)lineLen / TOOLTIP_MAX_LABEL_CHARS);
+      for (int seg = 0; seg < segmentCount; seg++)
+      {
+         int startPos = seg * TOOLTIP_MAX_LABEL_CHARS;
+         int segLen = MathMin(TOOLTIP_MAX_LABEL_CHARS, lineLen - startPos);
+         string segText = StringSubstr(lineText, startPos, segLen);
+
+         string labelName = TOOLTIP_LABEL_NAME + "_" + IntegerToString(i) + "_" + IntegerToString(seg);
+         CreateTooltipLabelSegment(labelName, segText, startX, yPos, textColor, fontSize);
+         ++labelCount;
+      }
+   }
+
+   // Chờ chart draw để có kích thước chính xác
+   ChartRedraw();
+   Sleep(1000);
+
+   // Tìm tổng chiều rộng lớn nhất của mỗi dòng
+   int labelWidths[];
+   ArrayResize(labelWidths, labelCount);
+   int j = 0;
+   int maxTotalWidth = 0;
+   for (int i = 0; i < lineCount; i++)
+   {
+      int lineWidth = 0;
+      // Tìm tất cả segments của dòng i
+      for (int seg = 0; seg < 100; seg++)
+      {
+         string labelName = TOOLTIP_LABEL_NAME + "_" + IntegerToString(i) + "_" + IntegerToString(seg);
+         if (ObjectFind(0, labelName) < 0)
+            break;
+
+         int width = (int)ObjectGetInteger(0, labelName, OBJPROP_XSIZE);
+         labelWidths[j++] = width;
+         lineWidth += width;
+      }
+      if (lineWidth > maxTotalWidth)
+         maxTotalWidth = lineWidth;
+   }
+
+   // Căn chỉnh tất cả các label sang phải
+   j = 0;
+   for (int i = 0; i < lineCount; i++)
+   {
+      // Tìm tất cả segments của dòng i
+      for (int seg = 0; seg < 100; seg++)
+      {
+         string labelName = TOOLTIP_LABEL_NAME + "_" + IntegerToString(i) + "_" + IntegerToString(seg);
+         if (ObjectFind(0, labelName) < 0)
+            break;
+         int lastWidth = seg == 0 ? 0 : labelWidths[j - 1];
+         j++;
+         ObjectSetInteger(0, labelName, OBJPROP_CORNER, CORNER_RIGHT_UPPER);
+         ObjectSetInteger(0, labelName, OBJPROP_XDISTANCE, maxTotalWidth - lastWidth + startX);
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Xóa tooltip label                                                |
+//+------------------------------------------------------------------+
+void HideTooltipLabel()
+{
+   ObjectsDeleteAll(0, TOOLTIP_LABEL_NAME);
+}
+
 // ============================================================
 // =================== ATR CALCULATION ========================
 // ============================================================

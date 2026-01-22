@@ -326,7 +326,6 @@ int OnInit()
 // ==================================================
 void OnDeinit(const int reason)
 {
-   Comment("");  // Xóa comment box
    ObjectsDeleteAll(0, OBJ_PREFIX);
    IndicatorRelease(hSMA50);
    IndicatorRelease(hSMA200);
@@ -339,6 +338,7 @@ void OnDeinit(const int reason)
    RemoveIndicatorsFromChart();
 
    // Clear tooltip data
+   HideTooltipLabel();
    ClearSignalTooltips(OBJ_PREFIX);
 }
 

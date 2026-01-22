@@ -779,7 +779,7 @@ void ScanForSignal(const SMAPullbackConfig& config, string symbol, datetime curr
       outResult.cancelled = true;
       outResult.confirmIdx = idx;
       outResult.confirmTime = time[idx];
-      outResult.cancelReason = "- Không nhận diện được signal";
+      outResult.cancelReason = "Không nhận diện được signal";
       return;
    }
 }

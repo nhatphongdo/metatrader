@@ -10,6 +10,8 @@
 #ifndef DRAW_UTILITIES_H
 #define DRAW_UTILITIES_H
 
+#include "Utility.mqh"
+
 // ==================================================
 // ============== DRAWING UTILITIES =================
 // ==================================================
@@ -66,23 +68,23 @@ bool HandleSignalChartEvent(const int id, const long& lparam, const double& dpar
          {
             lastMouseX = lparam;
             lastMouseY = dparam;
-            Comment(tooltip);
+            ShowTooltipLabel(tooltip);
             ChartRedraw();
             return true;
          }
       }
    }
-   // Click vào vùng trống - xóa comment
+   // Click vào vùng trống - xóa label
    else if (id == CHARTEVENT_CLICK)
    {
       // Do double events (OBJECT_CLICK và CLICK đều được gọi), cần kiểm tra last mouse position nếu không đổi thì không
-      // clear comment
+      // clear label
       if (lastMouseX == lparam && lastMouseY == dparam)
          return true;
 
       lastMouseX = -1;
       lastMouseY = -1;
-      Comment("");
+      HideTooltipLabel();
       ChartRedraw();
       return true;
    }
