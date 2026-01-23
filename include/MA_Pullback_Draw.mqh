@@ -317,7 +317,7 @@ void DrawCutCandleMarker(const SignalDrawConfig& config, int signalIdx, bool isB
       double offset = 0;
       if (pointValue > 0)
       {
-         offset = 10 * pointValue;  // 10 points offset
+         offset = 30 * pointValue;  // 30 points offset
          if (isBuy)
             offset = -offset;  // BUY: dịch xuống (giá thấp hơn)
                                // SELL: giữ nguyên dương (giá cao hơn)

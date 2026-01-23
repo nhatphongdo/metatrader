@@ -44,24 +44,11 @@ struct SMAPullbackConfig
    double minScoreToPass;     // Điểm tối thiểu để signal được chấp nhận
 
    // ==============================================================
-   // INDICATOR PARAMETERS
-   // ==============================================================
-   int sma50Period;   // Chu kỳ MA Fast
-   int sma200Period;  // Chu kỳ MA Slow
-   int rsiPeriod;     // Chu kỳ RSI
-   int macdFast;      // MACD Fast period
-   int macdSlow;      // MACD Slow period
-   int macdSignal;    // MACD Signal period
-   int adxPeriod;     // Chu kỳ ADX
-
-   // ==============================================================
    // STRATEGY PARAMETERS
    // ==============================================================
    int minTrendBars;        // Số nến tối thiểu để hình thành trend trước khi đảo chiều
    double sidewayATRRatio;  // Tỷ lệ vùng sideway 2 bên MA theo ATR
    int maxWaitBars;         // Số nến tối đa chờ pullback
-   int atrLength;           // Số nến tính ATR
-   double wickBodyRatio;    // Tỷ lệ Bóng/Thân nến
    int srLookback;          // Số nến để kiểm tra S/R Zone
 
    // ==============================================================
@@ -191,14 +178,6 @@ struct SMAPullbackConfig
    int newsMinutesAfter;   // Số phút sau tin để dừng trade
    int newsMinImportance;  // Mức độ quan trọng tối thiểu của tin (1=Low, 2=Medium, 3=High)
    double newsWeight;      // Trọng số của News filter
-
-   // ==============================================================
-   // FILTER: CONSECUTIVE LOSSES (EA only)
-   // Tạm dừng sau chuỗi thua liên tiếp
-   // ==============================================================
-   bool enableConsecutiveLossFilter;  // Bật/tắt Consecutive Loss filter
-   int maxConsecutiveLosses;          // Số lần thua liên tiếp tối đa để kích hoạt pause
-   int pauseMinutesAfterLosses;       // Số phút pause sau chuỗi thua
 };
 
 // ==================================================
@@ -586,6 +565,11 @@ struct ScanResult
    datetime startTime;  // Thời gian của nến bắt đầu scan
    int endIdx;          // Idx nến kết thúc sau khi scan
    datetime endTime;    // Thời gian của nến kết thúc sau khi scan
+
+   int failedSignalCount;        // Số lượng signal bị hủy
+   SignalResult failedSignal[];  // Danh sách các signal bị hủy
+   int failedIdx[];              // Idx nến các signal bị hủy
+   datetime failedTime[];        // Thời gian nến các signal bị hủy
 };
 
 //+------------------------------------------------------------------+
@@ -608,6 +592,10 @@ void ScanForSignal(const SMAPullbackConfig& config, string symbol, datetime curr
    outResult.startIdx = startIdx;
    outResult.startTime = time[startIdx];
    outResult.endIdx = -1;
+   outResult.failedSignalCount = 0;
+   ArrayResize(outResult.failedSignal, 0);
+   ArrayResize(outResult.failedIdx, 0);
+   ArrayResize(outResult.failedTime, 0);
 
    // Scan từng nến để theo dõi biến động giá, xác định dấu hiệu signal
    int idx = startIdx;
@@ -617,22 +605,13 @@ void ScanForSignal(const SMAPullbackConfig& config, string symbol, datetime curr
    int trendPeakIdx = -1;       // Idx của đỉnh / đáy trend
    while (idx >= 1)             // Chỉ scan đến nến đóng hoàn thiện gần nhất (nến 0 là nến đang chạy)
    {
-      int barTrend = 0;
-      if (IsGreaterThan(close[idx], sma50[idx], tickSize))
-      {
-         barTrend = 1;
-      }
-      else if (IsLessThan(close[idx], sma50[idx], tickSize))
-      {
-         barTrend = -1;
-      }
       bool isBuyBar = close[idx] > open[idx];
       bool isSellBar = close[idx] < open[idx];
 
       if (trend == 0)
       {
          // Chỉ kiểm tra trend lần đầu khi chưa xác định
-         trend = barTrend;
+         trend = isBuyBar ? 1 : (isSellBar ? -1 : 0);
          trendPeakIdx = idx;
          outResult.startIdx = idx;
          outResult.startTime = time[idx];
@@ -655,10 +634,15 @@ void ScanForSignal(const SMAPullbackConfig& config, string symbol, datetime curr
             // Lấy đáy nến
             trendPeakIdx = idx;
 
-         if (barTrend != 0 && trend != barTrend)
+         int cutTrend = 0;
+         if (IsGreaterThan(high[idx], sma50[idx], tickSize) && IsLessThan(low[idx], sma50[idx], tickSize))
+         {
+            cutTrend = isBuyBar ? 1 : (isSellBar ? -1 : 0);
+         }
+         if (cutTrend != 0 && trend != cutTrend)
          {
             outResult.isBuy = trend == 1;
-            // Trend đảo chiều (trend != barTrend)
+            // Trend đảo chiều (trend != cutTrend)
             // Kiểm tra điều kiện để xác nhận điểm cắt
             string cutReason =
                 CheckCutSignal(config, outResult.isBuy, trendBuyBarsCount, trendSellBarsCount,
@@ -680,7 +664,6 @@ void ScanForSignal(const SMAPullbackConfig& config, string symbol, datetime curr
             outResult.cutTime = time[idx];
             outResult.endIdx = idx;  // Điểm kết thúc là tại điểm cắt detect được để bỏ qua nó trong lần scan tiếp theo
             outResult.endTime = time[idx];
-            --idx;
          }
          else
          {
@@ -690,10 +673,11 @@ void ScanForSignal(const SMAPullbackConfig& config, string symbol, datetime curr
          }
       }
 
-      // Scan các nến sau nến cắt, tối đa WaitBars nến, để tìm điểm hồi
+      // Scan WaitBars nến sau nến cắt, tính từ nến cắt, để tìm điểm hồi
       // Sau thời điểm này, cutFound = true
-      for (int k = 0; k < config.maxWaitBars; k++)
+      for (int k = 0; k <= config.maxWaitBars; k++)
       {
+         /** Chuyển thành trọng số filter ----
          double sidewayUpper = sma50[idx] + atr[idx] * config.sidewayATRRatio;
          double sidewayLower = sma50[idx] - atr[idx] * config.sidewayATRRatio;
 
@@ -707,46 +691,24 @@ void ScanForSignal(const SMAPullbackConfig& config, string symbol, datetime curr
                                                   sidewayLower, sidewayUpper);
             return;
          }
+         */
 
          // Kiểm tra pattern
-         string buyPatternName =
-             DetectBuyPattern(idx, outResult.cutIdx, open, high, low, close, sma50, config.wickBodyRatio);
-         string sellPatternName =
-             DetectSellPattern(idx, outResult.cutIdx, open, high, low, close, sma50, config.wickBodyRatio);
+         CandlePatternResult buyPatternResult = DetectBuyPattern(idx, open, high, low, close, atr, arraySize);
+         CandlePatternResult sellPatternResult = DetectSellPattern(idx, open, high, low, close, atr, arraySize);
          string patternName = "";
 
          if (outResult.isBuy)
          {
-            // Đang theo dõi BUY nhưng phát hiện SELL pattern
-            if (sellPatternName != "")
-            {
-               outResult.cancelled = true;
-               outResult.confirmIdx = idx;
-               outResult.confirmTime = time[idx];
-               outResult.cancelReason = StringFormat("Gặp mô hình giảm: %s", sellPatternName);
-               return;
-            }
-            patternName = buyPatternName;
+            patternName = buyPatternResult.trend == BULLISH ? buyPatternResult.name : "";
          }
          else
          {
-            // Đang theo dõi SELL nhưng phát hiện BUY pattern
-            if (buyPatternName != "")
-            {
-               outResult.cancelled = true;
-               outResult.confirmIdx = idx;
-               outResult.confirmTime = time[idx];
-               outResult.cancelReason = StringFormat("Gặp mô hình tăng: %s", buyPatternName);
-               return;
-            }
-            patternName = sellPatternName;
+            patternName = sellPatternResult.trend == BEARISH ? sellPatternResult.name : "";
          }
 
          if (patternName != "")
          {
-            outResult.confirmIdx = idx;
-            outResult.confirmTime = time[idx];
-
             // Tiến hành kiểm tra điều kiện signal
             SignalResult result;
             ProcessSignal(config, outResult.isBuy, outResult.cutIdx, idx, symbol, currentTime, open, high, low, close,
@@ -763,6 +725,16 @@ void ScanForSignal(const SMAPullbackConfig& config, string symbol, datetime curr
                outResult.endIdx = idx;
                outResult.endTime = time[idx];
                return;
+            }
+            else
+            {
+               ArrayResize(outResult.failedSignal, outResult.failedSignalCount + 1);
+               ArrayResize(outResult.failedTime, outResult.failedSignalCount + 1);
+               ArrayResize(outResult.failedIdx, outResult.failedSignalCount + 1);
+               outResult.failedSignal[outResult.failedSignalCount] = result;
+               outResult.failedTime[outResult.failedSignalCount] = time[idx];
+               outResult.failedIdx[outResult.failedSignalCount] = idx;
+               outResult.failedSignalCount++;
             }
          }
 

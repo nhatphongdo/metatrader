@@ -30,14 +30,13 @@ input int InpMACDFast = DEF_MACD_FAST;            // Chu kỳ MACD Fast
 input int InpMACDSlow = DEF_MACD_SLOW;            // Chu kỳ MACD Slow
 input int InpMACDSignal = DEF_MACD_SIGNAL;        // Chu kỳ MACD Signal
 input int InpADXPeriod = DEF_ADX_PERIOD;          // Số nến tính ADX
+input int InpATRLength = DEF_ATR_LENGTH;          // Số nến tính ATR
 
 // --- STRATEGY SETTINGS ---
 input group "=== Cấu hình Chiến lược ===";
 input int InpMaxWaitBars = DEF_MAX_WAIT_BARS;             // Số nến tối đa chờ pullback
-input int InpATRLength = DEF_ATR_LENGTH;                  // Số nến tính ATR
 input int InpSRLookback = DEF_SR_LOOKBACK;                // Số nến lookback để tìm support / resistance
 input double InpSideWayATRRatio = DEF_SIDEWAY_ATR_RATIO;  // Tỷ lệ ATR để xác định vùng sideway
-input double InpWickBodyRatio = DEF_WICK_BODY_RATIO;      // Tỷ lệ Bóng/Thân nến
 
 // ==================================================
 // ============== FILTER SETTINGS ===================
@@ -216,21 +215,10 @@ int OnInit()
    g_config.minRiskRewardRate = InpMinRiskRewardRate;
    g_config.srBufferPercent = InpSRBufferPercent;
    g_config.minScoreToPass = InpMinScoreToPass;
-   // Indicator Parameters
-   g_config.sma50Period = InpMA50Period;
-   g_config.sma200Period = InpMA200Period;
-   g_config.maSlopeThreshold = InpMASlopeThreshold;
-   g_config.rsiPeriod = InpRSIPeriod;
-   g_config.macdFast = InpMACDFast;
-   g_config.macdSlow = InpMACDSlow;
-   g_config.macdSignal = InpMACDSignal;
-   g_config.adxPeriod = InpADXPeriod;
    // Strategy Parameters
    g_config.maxWaitBars = InpMaxWaitBars;
    g_config.sidewayATRRatio = InpSideWayATRRatio;
-   g_config.atrLength = InpATRLength;
    g_config.srLookback = InpSRLookback;
-   g_config.wickBodyRatio = InpWickBodyRatio;
    // Filter: MA Slope
    g_config.enableMASlopeFilter = InpEnableMASlopeFilter;
    g_config.maSlopeCritical = InpMASlopeCritical;
@@ -294,7 +282,6 @@ int OnInit()
    g_config.timeCritical = false;
    g_config.enableNewsFilter = false;
    g_config.newsCritical = false;
-   g_config.enableConsecutiveLossFilter = false;
 
    g_tickSize = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
    g_pointValue = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
@@ -582,6 +569,14 @@ int OnCalculate(const int rates_total, const int prev_calculated, const datetime
       g_lastSignalTime = scanResult.endTime;
       idx = scanResult.endIdx;
       g_signalCount++;
+
+      for (int i = 0; i < scanResult.failedSignalCount; i++)
+      {
+         // Signal failed - vẽ failed marker
+         DrawSignalMarker(g_drawConfig, g_signalCount, scanResult.isBuy, true, scanResult.failedTime[i], 0,
+                          scanResult.isBuy ? low[scanResult.failedIdx[i]] : high[scanResult.failedIdx[i]], 0, 0, "", 0,
+                          scanResult.failedSignal[i].reasons, 0, 0, "", g_pointValue, _Period);
+      }
 
       if (scanResult.cutFound)
       {

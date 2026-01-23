@@ -50,14 +50,13 @@ input int InpMACDFast = DEF_MACD_FAST;            // Chu kỳ MACD Fast
 input int InpMACDSlow = DEF_MACD_SLOW;            // Chu kỳ MACD Slow
 input int InpMACDSignal = DEF_MACD_SIGNAL;        // Chu kỳ MACD Signal
 input int InpADXPeriod = DEF_ADX_PERIOD;          // Số nến tính ADX
+input int InpATRLength = DEF_ATR_LENGTH;          // Số nến tính ATR
 
 // --- STRATEGY SETTINGS ---
 input group "=== Cấu hình Chiến lược ===";
 input int InpMaxWaitBars = DEF_MAX_WAIT_BARS;             // Số nến tối đa chờ pullback (ít hơn = entry sớm hơn)
-input int InpATRLength = DEF_ATR_LENGTH;                  // Số nến tính ATR
 input int InpSRLookback = DEF_SR_LOOKBACK;                // Số nến lookback để tìm support / resistance
 input double InpSideWayATRRatio = DEF_SIDEWAY_ATR_RATIO;  // Tỷ lệ ATR để xác định vùng sideway
-input double InpWickBodyRatio = DEF_WICK_BODY_RATIO;      // Tỷ lệ Bóng/Thân nến
 
 // ==================================================
 // ============== FILTER SETTINGS ===================
@@ -167,9 +166,9 @@ input double InpNewsWeight = DEF_NEWS_WEIGHT;              // Weight
 
 // FILTER: CONSECUTIVE LOSSES (EA Only)
 input group "=== Cấu hình Bộ lọc: Hạn chế lệnh thua liên tục ===";
-input bool InpEnableConsecLossFilter = DEF_ENABLE_CONSEC_LOSS_FILTER;  // Bật
-input int InpMaxConsecutiveLosses = DEF_MAX_CONSECUTIVE_LOSSES;        // Max
-input int InpPauseMinutesAfterLoss = DEF_PAUSE_MINUTES_AFTER_LOSS;     // Pause Mins
+input bool InpEnableConsecutiveLossFilter = DEF_ENABLE_CONSEC_LOSS_FILTER;  // Bật
+input int InpMaxConsecutiveLosses = DEF_MAX_CONSECUTIVE_LOSSES;             // Max
+input int InpPauseMinutesAfterLoss = DEF_PAUSE_MINUTES_AFTER_LOSS;          // Pause Mins
 
 // ==================================================
 // ================= BIẾN TOÀN CỤC ===================
@@ -259,21 +258,10 @@ int OnInit()
    g_config.minRiskRewardRate = InpMinRiskRewardRate;
    g_config.srBufferPercent = InpSRBufferPercent;
    g_config.minScoreToPass = InpMinScoreToPass;
-   // Indicator Parameters
-   g_config.sma50Period = InpMA50Period;
-   g_config.sma200Period = InpMA200Period;
-   g_config.maSlopeThreshold = InpMASlopeThreshold;
-   g_config.rsiPeriod = InpRSIPeriod;
-   g_config.macdFast = InpMACDFast;
-   g_config.macdSlow = InpMACDSlow;
-   g_config.macdSignal = InpMACDSignal;
-   g_config.adxPeriod = InpADXPeriod;
    // Strategy Parameters
    g_config.maxWaitBars = InpMaxWaitBars;
    g_config.sidewayATRRatio = InpSideWayATRRatio;
-   g_config.atrLength = InpATRLength;
    g_config.srLookback = InpSRLookback;
-   g_config.wickBodyRatio = InpWickBodyRatio;
    // Filter: MA Slope
    g_config.enableMASlopeFilter = InpEnableMASlopeFilter;
    g_config.maSlopeCritical = InpMASlopeCritical;
@@ -345,10 +333,6 @@ int OnInit()
    g_config.newsMinutesAfter = InpNewsMinutesAfter;
    g_config.newsMinImportance = InpNewsMinImportance;
    g_config.newsWeight = InpNewsWeight;
-   // Filter: Consecutive Losses (EA Only)
-   g_config.enableConsecutiveLossFilter = InpEnableConsecLossFilter;
-   g_config.maxConsecutiveLosses = InpMaxConsecutiveLosses;
-   g_config.pauseMinutesAfterLosses = InpPauseMinutesAfterLoss;
 
    g_tickSize = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
    g_pointValue = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
@@ -407,7 +391,7 @@ void PrintFiltersStatus()
       activeFilters += "Time ";
    if (g_config.enableNewsFilter)
       activeFilters += "News ";
-   if (g_config.enableConsecutiveLossFilter)
+   if (InpEnableConsecutiveLossFilter)
       activeFilters += "ConsecLoss ";
    Print(activeFilters);
 }
@@ -481,7 +465,7 @@ void OnTick()
    }
 
    // Check Consecutive Losses Filter - Tạm dừng trade nếu cần
-   if (g_config.enableConsecutiveLossFilter && g_pauseUntil > 0)
+   if (InpEnableConsecutiveLossFilter && g_pauseUntil > 0)
    {
       if (TimeCurrent() < g_pauseUntil)
       {
@@ -713,9 +697,9 @@ void OnTradeTransaction(const MqlTradeTransaction& trans, const MqlTradeRequest&
       Print("Lệnh thua. Chuỗi thua: ", g_consecutiveLosses);
 
       // Kiểm tra và tạm dừng nếu đạt ngƯỡng
-      if (g_config.enableConsecutiveLossFilter && g_consecutiveLosses >= g_config.maxConsecutiveLosses)
+      if (InpEnableConsecutiveLossFilter && g_consecutiveLosses >= InpMaxConsecutiveLosses)
       {
-         g_pauseUntil = TimeCurrent() + g_config.pauseMinutesAfterLosses * 60;
+         g_pauseUntil = TimeCurrent() + InpPauseMinutesAfterLoss * 60;
          Print("Max chuỗi thua (", g_consecutiveLosses, "). Tạm dừng đến ", TimeToString(g_pauseUntil));
       }
    }

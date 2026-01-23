@@ -50,9 +50,9 @@ enum ENUM_MA_TYPE_MODE
 // Giới hạn giao dịch
 // Số points StopLoss tối thiểu (5 pips = 50 points)
 #define DEF_MIN_STOP_LOSS 50.0
-// Tỷ lệ Reward/Risk (1.5 = TP 1.5 lần SL)
-#define DEF_MAX_RISK_REWARD_RATE 1.5
-#define DEF_MIN_RISK_REWARD_RATE 0.8
+// Tỷ lệ Reward/Risk (3.0 = TP 3 lần SL)
+#define DEF_MAX_RISK_REWARD_RATE 3.0
+#define DEF_MIN_RISK_REWARD_RATE 1.5
 // Số lệnh tối đa toàn tài khoản, 0 = không giới hạn
 #define DEF_MAX_ACCOUNT_ORDERS 3
 // Số lệnh tối đa cho mỗi symbol
@@ -88,11 +88,11 @@ enum ENUM_MA_TYPE_MODE
 // Số nến tính ATR
 #define DEF_ATR_LENGTH 14
 // Số nến lookback để tìm Support/Resistance
-#define DEF_SR_LOOKBACK 20
+#define DEF_SR_LOOKBACK 30
 // Tỷ lệ Bóng/Thân nến cho confirmation candle
 #define DEF_WICK_BODY_RATIO 1.5
 // Tỷ lệ ATR để xác định vùng sideway quanh giá
-#define DEF_SIDEWAY_ATR_RATIO 2.0
+#define DEF_SIDEWAY_ATR_RATIO 1.0
 
 // --- FILTER SETTINGS ---
 // Điểm tối thiểu để signal được coi là valid (0-100)%
