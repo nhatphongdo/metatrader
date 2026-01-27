@@ -26,10 +26,12 @@ $BuildDir = Join-Path $ScriptDir "build"
 $LogsDir = Join-Path $ScriptDir "logs"
 $EASourceDir = Join-Path $ScriptDir "expert-advisor"
 $IndicatorSourceDir = Join-Path $ScriptDir "indicator"
+$ScriptSourceDir = Join-Path $ScriptDir "script"
 
 # Output directories
 $EABuildDir = Join-Path $BuildDir "expert-advisor"
 $IndicatorBuildDir = Join-Path $BuildDir "indicator"
+$ScriptBuildDir = Join-Path $BuildDir "script"
 
 # Common MetaEditor paths on Windows
 $MetaEditorPaths = @(
@@ -78,7 +80,7 @@ function Find-MetaEditor {
 
 function Initialize-Directories {
     # Create directories if they don't exist
-    @($BuildDir, $LogsDir, $EABuildDir, $IndicatorBuildDir) | ForEach-Object {
+    @($BuildDir, $LogsDir, $EABuildDir, $IndicatorBuildDir, $ScriptBuildDir) | ForEach-Object {
         if (-not (Test-Path $_)) {
             New-Item -ItemType Directory -Path $_ -Force | Out-Null
             Write-Host "Created directory: $_" -ForegroundColor Gray
@@ -89,6 +91,7 @@ function Initialize-Directories {
         Write-Host "Cleaning build directory..." -ForegroundColor Yellow
         Remove-Item -Path "$EABuildDir\*" -Recurse -Force -ErrorAction SilentlyContinue
         Remove-Item -Path "$IndicatorBuildDir\*" -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -Path "$ScriptBuildDir\*" -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -155,7 +158,7 @@ function Compile-MQ5 {
 }
 
 function Install-ToMT5 {
-    param([string]$MT5Path, [string]$EABuildDir, [string]$IndicatorBuildDir, [switch]$ForceOverwrite)
+    param([string]$MT5Path, [string]$EABuildDir, [string]$IndicatorBuildDir, [string]$ScriptBuildDir, [switch]$ForceOverwrite)
 
     # MT5 stores user data in AppData, not Program Files
     # Find the MQL5 folder in AppData\Roaming\MetaQuotes\Terminal\<ID>\
@@ -181,6 +184,7 @@ function Install-ToMT5 {
 
     $mt5ExpertsDir = Join-Path $mt5DataPath "Experts"
     $mt5IndicatorsDir = Join-Path $mt5DataPath "Indicators"
+    $mt5ScriptsDir = Join-Path $mt5DataPath "Scripts"
 
     Write-Host "  MT5 Data: $mt5DataPath" -ForegroundColor Gray
 
@@ -235,6 +239,28 @@ function Install-ToMT5 {
         if ($shouldCopy) {
             Copy-Item $file.FullName $destPath -Force
             Write-Host "  Installed Indicator: $($file.Name) -> $mt5IndicatorsDir" -ForegroundColor Green
+            $installedCount++
+        }
+    }
+
+    # Install Scripts
+    $scriptFiles = Get-ChildItem -Path $ScriptBuildDir -Filter "*.ex5" -ErrorAction SilentlyContinue
+    foreach ($file in $scriptFiles) {
+        $destPath = Join-Path $mt5ScriptsDir $file.Name
+        $shouldCopy = $true
+        if (Test-Path $destPath) {
+            if ($ForceOverwrite) {
+                Write-Host "  Overwriting: $($file.Name)" -ForegroundColor Yellow
+            } else {
+                Write-Host "  File exists: $($file.Name)" -ForegroundColor Yellow
+                $response = Read-Host "    Overwrite? (y/N)"
+                $shouldCopy = ($response -eq 'y' -or $response -eq 'Y')
+                if (-not $shouldCopy) { Write-Host "    Skipped." -ForegroundColor Gray }
+            }
+        }
+        if ($shouldCopy) {
+            Copy-Item $file.FullName $destPath -Force
+            Write-Host "  Installed Script: $($file.Name) -> $mt5ScriptsDir" -ForegroundColor Green
             $installedCount++
         }
     }
@@ -296,11 +322,26 @@ if ($indicatorFiles) {
     Write-Host "  No Indicator files found." -ForegroundColor Gray
 }
 
+Write-Host ""
+
+# Compile Scripts
+Write-Host "[Scripts]" -ForegroundColor Yellow
+$scriptFiles = Get-ChildItem -Path $ScriptSourceDir -Filter "*.mq5" -ErrorAction SilentlyContinue
+if ($scriptFiles) {
+    foreach ($file in $scriptFiles) {
+        $logFile = Join-Path $LogsDir "script_$($file.BaseName).log"
+        $result = Compile-MQ5 -SourceFile $file.FullName -OutputDir $ScriptBuildDir -LogFile $logFile -MetaEditor $MetaEditor
+        if ($result) { $totalSuccess++ } else { $totalErrors++ }
+    }
+} else {
+    Write-Host "  No Script files found." -ForegroundColor Gray
+}
+
 # Install to MT5 if requested
 if ($Install -and $totalErrors -eq 0 -and $totalSuccess -gt 0) {
     Write-Host ""
     Write-Host "[Installing to MetaTrader 5]" -ForegroundColor Yellow
-    $installedCount = Install-ToMT5 -MT5Path $MT5Path -EABuildDir $EABuildDir -IndicatorBuildDir $IndicatorBuildDir -ForceOverwrite:$Force
+    $installedCount = Install-ToMT5 -MT5Path $MT5Path -EABuildDir $EABuildDir -IndicatorBuildDir $IndicatorBuildDir -ScriptBuildDir $ScriptBuildDir -ForceOverwrite:$Force
     Write-Host "  Total installed: $installedCount file(s)" -ForegroundColor Cyan
 }
 

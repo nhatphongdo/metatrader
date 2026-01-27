@@ -27,11 +27,13 @@ BUILD_DIR="$SCRIPT_DIR/build"
 LOGS_DIR="$SCRIPT_DIR/logs"
 EA_SOURCE_DIR="$SCRIPT_DIR/expert-advisor"
 INDICATOR_SOURCE_DIR="$SCRIPT_DIR/indicator"
+SCRIPT_SOURCE_DIR="$SCRIPT_DIR/script"
 INCLUDE_DIR="$SCRIPT_DIR/include"
 
 # Output directories
 EA_BUILD_DIR="$BUILD_DIR/expert-advisor"
 INDICATOR_BUILD_DIR="$BUILD_DIR/indicator"
+SCRIPT_BUILD_DIR="$BUILD_DIR/script"
 
 # Flags
 CLEAN=false
@@ -143,7 +145,7 @@ find_wine() {
 
 # Initialize directories
 initialize_directories() {
-    for dir in "$BUILD_DIR" "$LOGS_DIR" "$EA_BUILD_DIR" "$INDICATOR_BUILD_DIR"; do
+    for dir in "$BUILD_DIR" "$LOGS_DIR" "$EA_BUILD_DIR" "$INDICATOR_BUILD_DIR" "$SCRIPT_BUILD_DIR"; do
         if [[ ! -d "$dir" ]]; then
             mkdir -p "$dir"
             echo -e "${GRAY}Created directory: $dir${NC}"
@@ -154,6 +156,7 @@ initialize_directories() {
         echo -e "${YELLOW}Cleaning build directory...${NC}"
         rm -rf "$EA_BUILD_DIR"/* 2>/dev/null || true
         rm -rf "$INDICATOR_BUILD_DIR"/* 2>/dev/null || true
+        rm -rf "$SCRIPT_BUILD_DIR"/* 2>/dev/null || true
     fi
 }
 
@@ -323,6 +326,26 @@ else
     echo -e "  ${GRAY}No Indicator directory found.${NC}"
 fi
 
+echo ""
+
+# Compile Scripts
+echo -e "${YELLOW}[Scripts]${NC}"
+if [[ -d "$SCRIPT_SOURCE_DIR" ]]; then
+    for file in "$SCRIPT_SOURCE_DIR"/*.mq5; do
+        if [[ -f "$file" ]]; then
+            file_name=$(basename "$file" .mq5)
+            log_file="$LOGS_DIR/script_${file_name}.log"
+            if compile_mq5 "$file" "$SCRIPT_BUILD_DIR" "$log_file" "$METAEDITOR" "$WINE_CMD"; then
+                ((TOTAL_SUCCESS++))
+            else
+                ((TOTAL_ERRORS++))
+            fi
+        fi
+    done
+else
+    echo -e "  ${GRAY}No Script directory found.${NC}"
+fi
+
 # Install to MT5 if requested
 if [[ "$INSTALL" == true && $TOTAL_ERRORS -eq 0 && $TOTAL_SUCCESS -gt 0 ]]; then
     echo ""
@@ -369,6 +392,7 @@ if [[ "$INSTALL" == true && $TOTAL_ERRORS -eq 0 && $TOTAL_SUCCESS -gt 0 ]]; then
         echo -e "  ${GRAY}MT5 Data: $MT5_DATA_PATH${NC}"
         MT5_EXPERTS_DIR="$MT5_DATA_PATH/Experts"
         MT5_INDICATORS_DIR="$MT5_DATA_PATH/Indicators"
+        MT5_SCRIPTS_DIR="$MT5_DATA_PATH/Scripts"
     fi
 
     INSTALLED_COUNT=0
@@ -435,6 +459,38 @@ if [[ "$INSTALL" == true && $TOTAL_ERRORS -eq 0 && $TOTAL_SUCCESS -gt 0 ]]; then
         done
     else
         echo -e "  ${YELLOW}WARNING: MT5 Indicators folder not found: $MT5_INDICATORS_DIR${NC}"
+    fi
+
+    # Install Scripts
+    if [[ -d "$MT5_SCRIPTS_DIR" ]]; then
+        for file in "$SCRIPT_BUILD_DIR"/*.ex5; do
+            if [[ -f "$file" ]]; then
+                file_name=$(basename "$file")
+                dest_path="$MT5_SCRIPTS_DIR/$file_name"
+                should_copy=true
+
+                if [[ -f "$dest_path" ]]; then
+                    if [[ "$FORCE" == true ]]; then
+                        echo -e "  ${YELLOW}Overwriting: $file_name${NC}"
+                    else
+                        echo -e "  ${YELLOW}File exists: $file_name${NC}"
+                        read -p "    Overwrite? (y/N) " response
+                        if [[ "$response" != "y" && "$response" != "Y" ]]; then
+                            echo -e "    ${GRAY}Skipped.${NC}"
+                            should_copy=false
+                        fi
+                    fi
+                fi
+
+                if [[ "$should_copy" == true ]]; then
+                    cp "$file" "$dest_path"
+                    echo -e "  ${GREEN}Installed Script: $file_name -> $MT5_SCRIPTS_DIR${NC}"
+                    ((INSTALLED_COUNT++))
+                fi
+            fi
+        done
+    else
+        echo -e "  ${YELLOW}WARNING: MT5 Scripts folder not found: $MT5_SCRIPTS_DIR${NC}"
     fi
 
     echo -e "  ${CYAN}Total installed: $INSTALLED_COUNT file(s)${NC}"

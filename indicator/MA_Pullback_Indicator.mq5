@@ -182,19 +182,47 @@ long g_lastMouseY = -1;
 // ==================================================
 int OnInit()
 {
-   hSMA50 = iMA(_Symbol, _Period, InpMA50Period, 0, (ENUM_MA_METHOD)InpMAType, PRICE_CLOSE);
+   hSMA50 = iCustom(_Symbol, _Period, "Examples\\Custom Moving Average",
+                    InpMA50Period,              // Period
+                    0,                          // Shift
+                    (ENUM_MA_METHOD)InpMAType,  // Method
+                    InpMAFastColor,             // Color
+                    1,                          // Width
+                    PRICE_CLOSE                 // Price
+   );
+   if (hSMA50 == INVALID_HANDLE)
+      hSMA50 = iMA(_Symbol, _Period, InpMA50Period, 0, (ENUM_MA_METHOD)InpMAType, PRICE_CLOSE);
    if (hSMA50 == INVALID_HANDLE)
       return INIT_FAILED;
 
-   hSMA200 = iMA(_Symbol, _Period, InpMA200Period, 0, (ENUM_MA_METHOD)InpMAType, PRICE_CLOSE);
+   hSMA200 = iCustom(_Symbol, _Period, "Examples\\Custom Moving Average",
+                     InpMA200Period,             // Period
+                     0,                          // Shift
+                     (ENUM_MA_METHOD)InpMAType,  // Method
+                     InpMASlowColor,             // Color
+                     1,                          // Width
+                     PRICE_CLOSE                 // Price
+   );
+   if (hSMA200 == INVALID_HANDLE)
+      hSMA200 = iMA(_Symbol, _Period, InpMA200Period, 0, (ENUM_MA_METHOD)InpMAType, PRICE_CLOSE);
    if (hSMA200 == INVALID_HANDLE)
       return INIT_FAILED;
 
-   hRSI = iRSI(_Symbol, _Period, InpRSIPeriod, PRICE_CLOSE);
+   hRSI = iCustom(_Symbol, _Period, "Examples\\RSI",
+                  InpRSIPeriod,  // Period
+                  InpRSIColor,   // Color
+                  1,             // Width
+                  PRICE_CLOSE    // Price
+   );
+   if (hRSI == INVALID_HANDLE)
+      hRSI = iRSI(_Symbol, _Period, InpRSIPeriod, PRICE_CLOSE);
    if (hRSI == INVALID_HANDLE)
       return INIT_FAILED;
 
-   hMACD = iMACD(_Symbol, _Period, InpMACDFast, InpMACDSlow, InpMACDSignal, PRICE_CLOSE);
+   hMACD = iCustom(_Symbol, _Period, "Examples\\MACD", InpMACDFast, InpMACDSlow, InpMACDSignal, PRICE_CLOSE,
+                   InpMACDMainColor, 2, InpMACDSignalColor, 2, STYLE_DOT);
+   if (hMACD == INVALID_HANDLE)
+      hMACD = iMACD(_Symbol, _Period, InpMACDFast, InpMACDSlow, InpMACDSignal, PRICE_CLOSE);
    if (hMACD == INVALID_HANDLE)
       return INIT_FAILED;
 
@@ -351,7 +379,6 @@ void AddIndicatorsToChart()
    {
       if (IndicatorExists(chartId, "MA(" + IntegerToString(InpMA50Period) + ")", indName) == -1)
       {
-         PlotIndexSetInteger(hSMA50, 0, PLOT_LINE_COLOR, InpMAFastColor);
          if (!ChartIndicatorAdd(chartId, 0, hSMA50))
             Print("Lỗi thêm SMA50");
       }
@@ -362,7 +389,6 @@ void AddIndicatorsToChart()
    {
       if (IndicatorExists(chartId, "MA(" + IntegerToString(InpMA200Period) + ")", indName) == -1)
       {
-         PlotIndexSetInteger(hSMA200, 0, PLOT_LINE_COLOR, InpMASlowColor);
          if (!ChartIndicatorAdd(chartId, 0, hSMA200))
             Print("Lỗi thêm SMA200");
       }
@@ -373,7 +399,6 @@ void AddIndicatorsToChart()
    {
       if (IndicatorExists(chartId, "RSI(" + IntegerToString(InpRSIPeriod) + ")", indName) == -1)
       {
-         PlotIndexSetInteger(hRSI, 0, PLOT_LINE_COLOR, InpRSIColor);
          int rsiWindow = (int)ChartGetInteger(chartId, CHART_WINDOWS_TOTAL);
          if (!ChartIndicatorAdd(chartId, rsiWindow, hRSI))
             Print("Lỗi thêm RSI");
@@ -385,9 +410,6 @@ void AddIndicatorsToChart()
    {
       if (IndicatorExists(chartId, "MACD", indName) == -1)
       {
-         PlotIndexSetInteger(hMACD, 0, PLOT_LINE_COLOR, InpMACDMainColor);
-         PlotIndexSetInteger(hMACD, 1, PLOT_LINE_COLOR, InpMACDSignalColor);
-         PlotIndexSetInteger(hMACD, 1, PLOT_LINE_WIDTH, 2);
          int macdWindow = (int)ChartGetInteger(chartId, CHART_WINDOWS_TOTAL);
          if (!ChartIndicatorAdd(chartId, macdWindow, hMACD))
             Print("Lỗi thêm MACD");
