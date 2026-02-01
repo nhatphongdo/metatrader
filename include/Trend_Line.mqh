@@ -9,10 +9,11 @@
 //+------------------------------------------------------------------+
 #property copyright "Do Nhat Phong"
 
-#ifndef TRENDLINE_H
-#define TRENDLINE_H
+#ifndef TREND_LINE_H
+#define TREND_LINE_H
 
 #include "Utility.mqh"
+#include "Swing_Points.mqh"
 
 // ==================================================
 // ================== ENUMS =========================
@@ -28,12 +29,6 @@ enum ENUM_SLOPE_TYPE
 {
    SLOPE_PRICE_DEVIATION,  // Độ lệch giá mỗi nến (price/bar)
    SLOPE_ATR_PERCENT       // % ATR mỗi nến (%ATR/bar)
-};
-
-enum ENUM_SWING_SOURCE
-{
-   SWING_SOURCE_HIGHLOW,  // Swing High = High, Swing Low = Low (Default)
-   SWING_SOURCE_BODY      // Swing High = Max(Open, Close), Swing Low = Min(Open, Close)
 };
 
 // ==================================================
@@ -91,26 +86,6 @@ struct TrendlineData
    double score;              // Điểm đánh giá (0-100)
    bool isValid;              // Hợp lệ sau validation
    string invalidReason;      // Lý do không hợp lệ
-};
-
-//+------------------------------------------------------------------+
-//| Swing point data (lưu datetime thay vì index)                    |
-//+------------------------------------------------------------------+
-struct SwingPointData
-{
-   datetime time;  // Thời gian swing point
-   double price;   // Giá tại swing point
-};
-
-//+------------------------------------------------------------------+
-//| Swing point group (nhóm swing points cùng hướng trend)           |
-//+------------------------------------------------------------------+
-struct SwingPointGroup
-{
-   SwingPointData points[];  // Các swing points trong group
-   bool isUptrend;           // true = giá tăng theo thời gian
-   datetime startTime;       // Thời gian xa nhất (cũ nhất)
-   datetime endTime;         // Thời gian gần nhất (mới nhất)
 };
 
 // ==================================================
@@ -181,68 +156,6 @@ double GetPriceAtTime(const TrendlineData& trendline, datetime targetTime, const
 double GetPriceAtOffset(double slopePrice, double startPrice, int offset)
 {
    return startPrice + slopePrice * offset;
-}
-
-// ==================================================
-// ============= SWING DETECTION ====================
-// ==================================================
-
-//+------------------------------------------------------------------+
-//| Kiểm tra nến có phải Swing High không                            |
-//| Swing High: high[i] >= max(high của N nến trước và N nến sau)    |
-//+------------------------------------------------------------------+
-bool IsSwingHigh(int index, int swingPeriod, const double& high[], int arraySize)
-{
-   // Kiểm tra bounds
-   if (index < swingPeriod || index >= arraySize - swingPeriod)
-      return false;
-
-   double currentHigh = high[index];
-
-   // Kiểm tra N nến trước (index nhỏ hơn = mới hơn trong series)
-   for (int i = 1; i <= swingPeriod; i++)
-   {
-      if (high[index - i] > currentHigh)
-         return false;
-   }
-
-   // Kiểm tra N nến sau (index lớn hơn = cũ hơn trong series)
-   for (int i = 1; i <= swingPeriod; i++)
-   {
-      if (high[index + i] > currentHigh)
-         return false;
-   }
-
-   return true;
-}
-
-//+------------------------------------------------------------------+
-//| Kiểm tra nến có phải Swing Low không                             |
-//| Swing Low: low[i] <= min(low của N nến trước và N nến sau)       |
-//+------------------------------------------------------------------+
-bool IsSwingLow(int index, int swingPeriod, const double& low[], int arraySize)
-{
-   // Kiểm tra bounds
-   if (index < swingPeriod || index >= arraySize - swingPeriod)
-      return false;
-
-   double currentLow = low[index];
-
-   // Kiểm tra N nến trước
-   for (int i = 1; i <= swingPeriod; i++)
-   {
-      if (low[index - i] < currentLow)
-         return false;
-   }
-
-   // Kiểm tra N nến sau
-   for (int i = 1; i <= swingPeriod; i++)
-   {
-      if (low[index + i] < currentLow)
-         return false;
-   }
-
-   return true;
 }
 
 // ==================================================
@@ -456,131 +369,6 @@ bool IsDuplicateTrendline(const TrendlineData& tl1, const TrendlineData& tl2, do
    return false;
 }
 
-//+------------------------------------------------------------------------+
-//| Phân đoạn Swing Points thành các nhóm đơn điệu (Increasing/Decreasing) |
-//| Thuật toán: Duyệt tuần tự, ngắt nhóm khi đổi hướng hoặc bằng giá       |
-//+------------------------------------------------------------------------+
-void SegmentMonotonicPoints(const SwingPointData& points[], SwingPointGroup& outIncGroups[],
-                            SwingPointGroup& outDecGroups[])
-{
-   ArrayResize(outIncGroups, 0);
-   ArrayResize(outDecGroups, 0);
-
-   int count = ArraySize(points);
-   if (count == 0)
-      return;
-
-   // Init first group with first point
-   SwingPointData currentGroup[];
-   ArrayResize(currentGroup, 1);
-   currentGroup[0] = points[0];
-
-   int currentTrend = 0;  // 0: Đi ngang, 1: Tăng, -1: Giảm
-
-   for (int i = 1; i < count; i++)
-   {
-      double valCurrent = points[i].price;
-      double valLast = currentGroup[ArraySize(currentGroup) - 1].price;
-
-      int stepTrend = 0;
-      if (valCurrent > valLast)
-         stepTrend = 1;  // Tăng (Val[i] > Val[i-1])
-      else if (valCurrent < valLast)
-         stepTrend = -1;  // Giảm
-      else
-         stepTrend = 0;  // Đi ngang
-
-      bool breakGroup = false;
-
-      if (currentTrend == 0)  // Chưa có trend
-      {
-         if (stepTrend == 0)
-            breakGroup = true;
-         else
-         {
-            currentTrend = stepTrend;
-            int s = ArraySize(currentGroup);
-            ArrayResize(currentGroup, s + 1);
-            currentGroup[s] = points[i];
-         }
-      }
-      else  // Trend đã được xác định
-      {
-         if (stepTrend == currentTrend)
-         {
-            int s = ArraySize(currentGroup);
-            ArrayResize(currentGroup, s + 1);
-            currentGroup[s] = points[i];
-         }
-         else  // Trend thay đổi hoặc bằng giá -> Break
-         {
-            breakGroup = true;
-         }
-      }
-
-      if (breakGroup)
-      {
-         // Lưu group hiện tại nếu hợp lệ
-         if (ArraySize(currentGroup) >= 2)
-         {
-            if (currentTrend == 1)  // Tăng
-            {
-               int gIdx = ArraySize(outIncGroups);
-               ArrayResize(outIncGroups, gIdx + 1);
-               ArrayResize(outIncGroups[gIdx].points, ArraySize(currentGroup));
-               ArrayCopy(outIncGroups[gIdx].points, currentGroup);
-               outIncGroups[gIdx].isUptrend = true;
-
-               // Fill Time range
-               outIncGroups[gIdx].startTime = currentGroup[ArraySize(currentGroup) - 1].time;
-               outIncGroups[gIdx].endTime = currentGroup[0].time;
-            }
-            else if (currentTrend == -1)  // Giảm
-            {
-               int gIdx = ArraySize(outDecGroups);
-               ArrayResize(outDecGroups, gIdx + 1);
-               ArrayResize(outDecGroups[gIdx].points, ArraySize(currentGroup));
-               ArrayCopy(outDecGroups[gIdx].points, currentGroup);
-               outDecGroups[gIdx].isUptrend = false;
-
-               outDecGroups[gIdx].startTime = currentGroup[ArraySize(currentGroup) - 1].time;
-               outDecGroups[gIdx].endTime = currentGroup[0].time;
-            }
-         }
-
-         // Bắt đầu group mới từ điểm hiện tại i
-         ArrayResize(currentGroup, 1);
-         currentGroup[0] = points[i];
-         currentTrend = 0;
-      }
-   }
-
-   // Xử lý group cuối cùng
-   if (ArraySize(currentGroup) >= 2 && currentTrend != 0)
-   {
-      if (currentTrend == 1)
-      {
-         int gIdx = ArraySize(outIncGroups);
-         ArrayResize(outIncGroups, gIdx + 1);
-         ArrayResize(outIncGroups[gIdx].points, ArraySize(currentGroup));
-         ArrayCopy(outIncGroups[gIdx].points, currentGroup);
-         outIncGroups[gIdx].isUptrend = true;
-         outIncGroups[gIdx].startTime = currentGroup[ArraySize(currentGroup) - 1].time;
-         outIncGroups[gIdx].endTime = currentGroup[0].time;
-      }
-      else if (currentTrend == -1)
-      {
-         int gIdx = ArraySize(outDecGroups);
-         ArrayResize(outDecGroups, gIdx + 1);
-         ArrayResize(outDecGroups[gIdx].points, ArraySize(currentGroup));
-         ArrayCopy(outDecGroups[gIdx].points, currentGroup);
-         outDecGroups[gIdx].isUptrend = false;
-         outDecGroups[gIdx].startTime = currentGroup[ArraySize(currentGroup) - 1].time;
-         outDecGroups[gIdx].endTime = currentGroup[0].time;
-      }
-   }
-}
-
 //+------------------------------------------------------------------+
 //| Phát hiện tất cả Trendlines (Top và/hoặc Bottom)                 |
 //| Thuật toán: Monotonic Segmentation & Pair-wise Detection         |
@@ -602,89 +390,14 @@ int DetectTrendlines(const double& high[], const double& low[], const double& op
       return 0;
    }
 
-   // Nếu lookbackBars <= 0, quét toàn bộ dữ liệu
-   int effectiveLookback = (lookbackBars <= 0) ? arraySize : lookbackBars;
-   int maxIndex = MathMin(effectiveLookback, arraySize - config.swingPeriod);
-   int minIndex = MathMax(startIndex, config.swingPeriod);
-
    // ==================================================
    // Bước 1: Tìm tất cả swing points (từ cũ đến mới)
    // ==================================================
 
-   // Chuẩn bị source arrays dựa trên config
-   double srcHigh[];
-   double srcLow[];
-   bool useBody = (config.swingSource == SWING_SOURCE_BODY);
-
-   if (useBody)
-   {
-      ArrayResize(srcHigh, arraySize);
-      ArrayResize(srcLow, arraySize);
-      for (int i = 0; i < arraySize; i++)
-      {
-         srcHigh[i] = MathMax(open[i], close[i]);
-         srcLow[i] = MathMin(open[i], close[i]);
-      }
-   }
-
    SwingPointData swingHighs[];
-   int swingHighCount = 0;
-
    SwingPointData swingLows[];
-   int swingLowCount = 0;
-
-   for (int i = maxIndex - 1; i >= minIndex; i--)
-   {
-      if (detectTop)
-      {
-         bool isHigh = false;
-         double price = 0;
-
-         if (useBody)
-         {
-            isHigh = IsSwingHigh(i, config.swingPeriod, srcHigh, arraySize);
-            price = srcHigh[i];
-         }
-         else
-         {
-            isHigh = IsSwingHigh(i, config.swingPeriod, high, arraySize);
-            price = high[i];
-         }
-
-         if (isHigh)
-         {
-            ArrayResize(swingHighs, swingHighCount + 1);
-            swingHighs[swingHighCount].time = time[i];
-            swingHighs[swingHighCount].price = price;
-            swingHighCount++;
-         }
-      }
-
-      if (detectBottom)
-      {
-         bool isLow = false;
-         double price = 0;
-
-         if (useBody)
-         {
-            isLow = IsSwingLow(i, config.swingPeriod, srcLow, arraySize);
-            price = srcLow[i];
-         }
-         else
-         {
-            isLow = IsSwingLow(i, config.swingPeriod, low, arraySize);
-            price = low[i];
-         }
-
-         if (isLow)
-         {
-            ArrayResize(swingLows, swingLowCount + 1);
-            swingLows[swingLowCount].time = time[i];
-            swingLows[swingLowCount].price = price;
-            swingLowCount++;
-         }
-      }
-   }
+   FindSwingPoints(high, low, open, close, time, arraySize, startIndex, lookbackBars, swingHighs, swingLows, detectTop,
+                   detectBottom, config.swingPeriod, config.swingSource);
 
    // ==================================================
    // Bước 2: Segment Swing Points thành groups Monotonic
@@ -990,4 +703,4 @@ int FilterTrendlinesForUpdate(const TrendlineData& allTrendlines[], int totalCou
    return updateCount;
 }
 
-#endif  // TRENDLINE_H
+#endif  // TREND_LINE_H

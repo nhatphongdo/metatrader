@@ -6,14 +6,18 @@
 #property version "1.0.0"
 #property script_show_inputs
 
+#include "../include/Swing_Points.mqh"
+
 // --- INPUTS ---
 input group "1. Danh sách Period cần quét";
 input string CustomPeriods = "10,13,20,21,30,34,50,55,89,100,144,200,233";  // Nhập các số cách nhau bởi dấu phẩy
 input ENUM_MA_METHOD Method = MODE_EMA;                                     // Loại MA
 
-input group "2. Cấu hình Logic Bounce";
-input double SlopePoints = 0.2;  // Độ dốc tối thiểu để xác nhận Trend tính theo points
-input double TouchZone = 0.01;   // Vùng đệm nhận diện chạm (%) - QUAN TRỌNG
+input group "2. Cấu hình Logic Quét";
+input bool UseSwingPoints = true;  // Sử dụng Swing Points thay vì nến bounce
+input int SwingPeriod = 3;         // Số nến trước và sau swing point để xác định swing point (3 trước, 3 sau)
+input double SlopePoints = 0.2;    // Độ dốc tối thiểu để xác nhận Trend tính theo points
+input double TouchZone = 0.05;     // Vùng đệm nhận diện chạm (%) - QUAN TRỌNG
 
 input group "3. Cấu hình Dữ liệu & Hiển thị";
 input int LookBack = 1000;   // Số nến quá khứ
@@ -21,8 +25,8 @@ input int TestPercent = 20;  // % Dữ liệu dùng để Test (Out-of-Sample)
 
 input group "4. Cấu hình Vẽ (Visual)";
 input bool AutoDraw = true;  // Tự động vẽ đường tốt nhất lên chart?
-input int DrawCount = 5;     // Số đường vẽ tối đa
-input int DrawWidth = 1;     // Độ dày nét vẽ
+input int DrawCount = 1;     // Số đường vẽ tối đa
+input int DrawWidth = 2;     // Độ dày nét vẽ
 
 // --- STRUCT LƯU KẾT QUẢ ---
 struct MAResult
@@ -61,7 +65,6 @@ struct MAResult
    }
 };
 
-int g_ma_handle;
 color g_DrawColors[] = {clrGold,         clrLawnGreen, clrDeepSkyBlue,  clrOrange,
                         clrSpringGreen,  clrSkyBlue,   clrLightCoral,   clrLightSalmon,
                         clrLemonChiffon, clrLightCyan, clrLightSkyBlue, clrLightYellow};  // Màu sắc của đường MA
@@ -90,12 +93,54 @@ int OnStart()
       periodList[i] = (int)StringToInteger(periodsStr[i]);
    }
 
-   // 2. CHUẨN BỊ DỮ LIỆU GIÁ
-   MqlRates rates[];
-   ArraySetAsSeries(rates, true);
-   int copied = CopyRates(_Symbol, _Period, 1, LookBack + 5, rates);
+   // Xóa các đối tượng cũ
+   if (AutoDraw)
+   {
+      ObjectsDeleteAll(0, "SWING_");
+      long chartId = ChartID();
 
-   if (copied < LookBack)
+      // Xóa MA
+      for (int i = 0; i < sep_count; i++)
+      {
+         string indName = "";
+         int window = IndicatorExists(chartId, "MA(" + IntegerToString(periodList[i]) + ")", indName);
+         if (window >= 0 && indName != "")
+         {
+            ChartIndicatorDelete(chartId, window, indName);
+         }
+      }
+   }
+
+   // 2. CHUẨN BỊ DỮ LIỆU GIÁ
+   double open[], high[], low[], close[];
+   datetime time[];
+   ArraySetAsSeries(open, true);
+   ArraySetAsSeries(high, true);
+   ArraySetAsSeries(low, true);
+   ArraySetAsSeries(close, true);
+   ArraySetAsSeries(time, true);
+
+   if (CopyOpen(_Symbol, _Period, 1, LookBack + 5, open) < LookBack)
+   {
+      Print("Lỗi: Không đủ dữ liệu!");
+      return 1;
+   }
+   if (CopyHigh(_Symbol, _Period, 1, LookBack + 5, high) < LookBack)
+   {
+      Print("Lỗi: Không đủ dữ liệu!");
+      return 1;
+   }
+   if (CopyLow(_Symbol, _Period, 1, LookBack + 5, low) < LookBack)
+   {
+      Print("Lỗi: Không đủ dữ liệu!");
+      return 1;
+   }
+   if (CopyClose(_Symbol, _Period, 1, LookBack + 5, close) < LookBack)
+   {
+      Print("Lỗi: Không đủ dữ liệu!");
+      return 1;
+   }
+   if (CopyTime(_Symbol, _Period, 1, LookBack + 5, time) < LookBack)
    {
       Print("Lỗi: Không đủ dữ liệu!");
       return 1;
@@ -107,7 +152,20 @@ int OnStart()
    int split_idx = (int)(LookBack * TestPercent / 100.0);
    MAResult all_results[];
 
-   // 3. DUYỆT QUA DANH SÁCH
+   // 3. TÌM SWING POINTS
+
+   SwingPointData swingHighs[];
+   SwingPointData swingLows[];
+   int swingPointsCount = FindSwingPoints(high, low, open, close, time, LookBack, 0, LookBack, swingHighs, swingLows,
+                                          true, true, SwingPeriod);
+   if (UseSwingPoints)
+   {
+      Print("Số lượng Swing Points tìm thấy: ", swingPointsCount);
+   }
+   int swingHighCount = ArraySize(swingHighs);
+   int swingLowCount = ArraySize(swingLows);
+
+   // 4. DUYỆT QUA DANH SÁCH
    for (int i = 0; i < sep_count; i++)
    {
       int p = periodList[i];
@@ -136,91 +194,136 @@ int OnStart()
 
       int b_total = 0, f_total = 0;  // Bounce & Fail toàn bộ
       int b_test = 0, f_test = 0;    // Bounce & Fail vùng Test
-      int trend = 0;                 // 1: tăng, -1: giảm, 0: neutral
 
-      for (int i = LookBack - 1; i >= 0; i--)
+      if (UseSwingPoints)
       {
-         double ma_curr = maBuffer[i];
-         double ma_prev = maBuffer[i + 1];
-         if (ma_prev == 0)
-            continue;
-
-         // Chênh lệch giá trị theo Point
-         double diff = maBuffer[i] - maBuffer[i + 1];
-         double slope_in_points = diff / point;
-         double close = rates[i].close;
-         double high = rates[i].high;
-         double low = rates[i].low;
-
-         // Biến kiểm tra kết quả nến hiện tại
-         // 0: Không chạm, 1: Bounce (Tốt), -1: Fail (Xấu)
-         int result = 0;
-
-         if (trend == 0)
+         for (int i = 0; i < swingHighCount; i++)
          {
-            if (low > ma_curr)
+            double ma_curr = maBuffer[swingHighs[i].index];
+
+            // Điều kiện Chạm: Swing point's price chạm vào MA
+            if (swingHighs[i].price > 0 && swingHighs[i].price <= ma_curr * (1.0 + zone_factor) &&
+                swingHighs[i].price >= ma_curr * (1.0 - zone_factor))
             {
-               trend = 1;
+               b_total++;
+               if (swingHighs[i].index < split_idx)
+                  b_test++;
             }
-            else if (high < ma_curr)
+            else
             {
-               trend = -1;
+               f_total++;
+               if (swingHighs[i].index < split_idx)
+                  f_test++;
             }
          }
-         // 1. XU HƯỚNG TĂNG
-         else if (trend == 1)
+         for (int i = 0; i < swingLowCount; i++)
          {
-            // Điều kiện Chạm: Low chạm vào MA (hoặc xuyên qua)
-            if (low <= ma_curr * (1.0 + zone_factor))
+            double ma_curr = maBuffer[swingLows[i].index];
+
+            // Điều kiện Chạm: Swing point's price chạm vào MA
+            if (swingLows[i].price > 0 && swingLows[i].price <= ma_curr * (1.0 + zone_factor) &&
+                swingLows[i].price >= ma_curr * (1.0 - zone_factor))
             {
-               // Đánh giá phản ứng:
-               if (close > ma_curr * (1.0 - zone_factor))
-                  result = 1;  // Rút chân thành công (Pinbar/Bounce)
-               else
-               {
-                  trend = -1;
-                  result = -1;  // Đóng cửa dưới MA -> Gãy (Fail)
-               }
+               b_total++;
+               if (swingLows[i].index < split_idx)
+                  b_test++;
+            }
+            else
+            {
+               f_total++;
+               if (swingLows[i].index < split_idx)
+                  f_test++;
             }
          }
-         // 2. XU HƯỚNG GIẢM
-         else if (trend == -1)
+      }
+      else
+      {
+         int trend = 0;  // 1: tăng, -1: giảm, 0: neutral
+
+         for (int i = LookBack - 1; i >= 0; i--)
          {
-            // Điều kiện Chạm: High chạm vào MA (hoặc xuyên qua)
-            if (high >= ma_curr * (1.0 - zone_factor))
+            double ma_curr = maBuffer[i];
+            double ma_prev = maBuffer[i + 1];
+            if (ma_prev == 0)
+               continue;
+
+            // Chênh lệch giá trị theo Point
+            double diff = maBuffer[i] - maBuffer[i + 1];
+            double slope_in_points = diff / point;
+            double close = close[i];
+            double high = high[i];
+            double low = low[i];
+
+            // Biến kiểm tra kết quả nến hiện tại
+            // 0: Không chạm, 1: Bounce (Tốt), -1: Fail (Xấu)
+            int result = 0;
+
+            if (trend == 0)
             {
-               // Đánh giá phản ứng:
-               if (close < ma_curr * (1.0 + zone_factor))
-                  result = 1;  // Rút chân thành công
-               else
+               if (low > ma_curr)
                {
                   trend = 1;
-                  result = -1;  // Đóng cửa trên MA -> Gãy
+               }
+               else if (high < ma_curr)
+               {
+                  trend = -1;
                }
             }
-         }
+            // 1. XU HƯỚNG TĂNG
+            else if (trend == 1)
+            {
+               // Điều kiện Chạm: Low chạm vào MA (hoặc xuyên qua)
+               if (low <= ma_curr * (1.0 + zone_factor))
+               {
+                  // Đánh giá phản ứng:
+                  if (close > ma_curr * (1.0 - zone_factor))
+                     result = 1;  // Rút chân thành công (Pinbar/Bounce)
+                  else
+                  {
+                     trend = -1;
+                     result = -1;  // Đóng cửa dưới MA -> Gãy (Fail)
+                  }
+               }
+            }
+            // 2. XU HƯỚNG GIẢM
+            else if (trend == -1)
+            {
+               // Điều kiện Chạm: High chạm vào MA (hoặc xuyên qua)
+               if (high >= ma_curr * (1.0 - zone_factor))
+               {
+                  // Đánh giá phản ứng:
+                  if (close < ma_curr * (1.0 + zone_factor))
+                     result = 1;  // Rút chân thành công
+                  else
+                  {
+                     trend = 1;
+                     result = -1;  // Đóng cửa trên MA -> Gãy
+                  }
+               }
+            }
 
-         // Không tính phản ứng khi MA đi ngang
-         if (MathAbs(slope_in_points) < SlopePoints)
-         {
-            result = 0;
-         }
+            // Không tính phản ứng khi MA đi ngang
+            if (MathAbs(slope_in_points) < SlopePoints)
+            {
+               result = 0;
+            }
 
-         // Tổng hợp thống kê
-         if (result != 0)
-         {
-            if (result == 1)
-               b_total++;
-            else
-               f_total++;
-
-            // Thống kê riêng cho vùng Test (Dữ liệu mới)
-            if (i < split_idx)
+            // Tổng hợp thống kê
+            if (result != 0)
             {
                if (result == 1)
-                  b_test++;
+                  b_total++;
                else
-                  f_test++;
+                  f_total++;
+
+               // Thống kê riêng cho vùng Test (Dữ liệu mới)
+               if (i < split_idx)
+               {
+                  if (result == 1)
+                     b_test++;
+                  else
+                     f_test++;
+               }
             }
          }
       }
@@ -232,7 +335,7 @@ int OnStart()
       IndicatorRelease(handle);
    }
 
-   // 4. SẮP XẾP THEO TEST RATE GIẢM DẦN
+   // 5. SẮP XẾP THEO RATE GIẢM DẦN
    int count = ArraySize(all_results);
    for (int i = 0; i < count - 1; i++)
    {
@@ -247,19 +350,22 @@ int OnStart()
       }
    }
 
-   // 5. IN KẾT QUẢ
+   // 6. IN KẾT QUẢ
    Print(
-       "---------------------------------------------------------------------------------------------------------------"
+       "------------------------------------------------------------------------------------------------------------"
+       "---"
        "--------------------");
    Print("CHIẾN LƯỢC: TÌM SỰ NHẤT QUÁN (CONSISTENCY / WIN RATE)");
    Print("Loại bỏ các đường MA bị xuyên phá (Fail) quá nhiều.");
    Print(
-       "---------------------------------------------------------------------------------------------------------------"
+       "------------------------------------------------------------------------------------------------------------"
+       "---"
        "--------------------");
    PrintFormat("| %-5s | %-6s | %-10s | %-12s | %-12s | %-10s | %-10s | %-14s | %-12s |", "RANK", "PERIOD", "WIN RATE",
                "TEST RATE", "TOTAL RATE", "BOUNCES", "FAILS", "BOUNCES TEST", "FAILS TEST");
    Print(
-       "---------------------------------------------------------------------------------------------------------------"
+       "------------------------------------------------------------------------------------------------------------"
+       "---"
        "--------------------");
 
    for (int i = 0; i < count; i++)
@@ -282,10 +388,11 @@ int OnStart()
                   all_results[i].bounces_test, all_results[i].failures_test, comment);
    }
    Print(
-       "---------------------------------------------------------------------------------------------------------------"
+       "------------------------------------------------------------------------------------------------------------"
+       "---"
        "--------------------");
 
-   // 6. TỰ ĐỘNG VẼ LÊN CHART
+   // 7. TỰ ĐỘNG VẼ LÊN CHART
    int draw_count = MathMin(DrawCount, count);
    if (AutoDraw && draw_count > 0)
    {
@@ -297,22 +404,49 @@ int OnStart()
 
          // Dùng "Examples\\Custom Moving Average" (đã modified để thêm inputs) để chỉnh màu
          // Đường dẫn này tồn tại mặc định trong mọi MT5
-         g_ma_handle = iCustom(NULL, 0, "Examples\\Custom Moving Average",
-                               p,                             // Period
-                               0,                             // Shift
-                               Method,                        // Method
-                               g_DrawColors[i % color_size],  // Color
-                               DrawWidth,                     // Width
-                               PRICE_CLOSE                    // Price
+         color drawColor = g_DrawColors[i % color_size];
+         int ma_handle = iCustom(_Symbol, _Period, "Examples\\Custom Moving Average",
+                                 p,           // Period
+                                 0,           // Shift
+                                 Method,      // Method
+                                 drawColor,   // Color
+                                 DrawWidth,   // Width
+                                 TouchZone,   // Zone width
+                                 0x303030,    // Zone color
+                                 PRICE_CLOSE  // Price
          );
-
-         if (g_ma_handle != INVALID_HANDLE)
+         if (ma_handle != INVALID_HANDLE)
          {
             // Thêm vào cửa sổ chính (subwin = 0)
-            if (!ChartIndicatorAdd(0, 0, g_ma_handle))
+            if (!ChartIndicatorAdd(0, 0, ma_handle))
             {
                Print("Lỗi thêm Indicator: ", GetLastError());
             }
+         }
+      }
+
+      // Vẽ swing points
+      if (UseSwingPoints)
+      {
+         string baseId = "SWING_";
+
+         for (int i = 0; i < swingHighCount; i++)
+         {
+            string touchId = baseId + "H_" + IntegerToString(i);
+            ObjectCreate(0, touchId, OBJ_ARROW, 0, swingHighs[i].time, swingHighs[i].price);
+            ObjectSetInteger(0, touchId, OBJPROP_ARROWCODE, 159);
+            ObjectSetInteger(0, touchId, OBJPROP_COLOR, clrCyan);
+            ObjectSetInteger(0, touchId, OBJPROP_WIDTH, 3);
+            ObjectSetInteger(0, touchId, OBJPROP_ANCHOR, ANCHOR_BOTTOM);
+         }
+         for (int i = 0; i < swingLowCount; i++)
+         {
+            string touchId = baseId + "L_" + IntegerToString(i);
+            ObjectCreate(0, touchId, OBJ_ARROW, 0, swingLows[i].time, swingLows[i].price);
+            ObjectSetInteger(0, touchId, OBJPROP_ARROWCODE, 159);
+            ObjectSetInteger(0, touchId, OBJPROP_COLOR, clrCyan);
+            ObjectSetInteger(0, touchId, OBJPROP_WIDTH, 3);
+            ObjectSetInteger(0, touchId, OBJPROP_ANCHOR, ANCHOR_TOP);
          }
       }
    }

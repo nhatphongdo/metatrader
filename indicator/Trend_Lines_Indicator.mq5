@@ -11,7 +11,7 @@
 #property indicator_chart_window
 #property indicator_plots 0
 
-#include "../include/TrendLine.mqh"
+#include "../include/Trend_Line.mqh"
 
 // ==================================================
 // ================== INPUTS ========================

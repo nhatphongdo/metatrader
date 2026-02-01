@@ -80,19 +80,19 @@ enum ENUM_MA_TYPE_MODE
 #define DEF_MACD_SIGNAL 9
 // Chu kỳ ADX indicator
 #define DEF_ADX_PERIOD 14
+// Số nến tính ATR
+#define DEF_ATR_LENGTH 14
 
 // --- STRATEGY SETTINGS ---
 // Cài đặt chiến lược entry
+// Số nến tối thiểu để hình thành trend trước khi đảo chiều
+#define DEF_MIN_TREND_BARS 10
 // Số nến tối đa chờ pullback
 #define DEF_MAX_WAIT_BARS 20
-// Số nến tính ATR
-#define DEF_ATR_LENGTH 14
 // Số nến lookback để tìm Support/Resistance
 #define DEF_SR_LOOKBACK 30
-// Tỷ lệ Bóng/Thân nến cho confirmation candle
-#define DEF_WICK_BODY_RATIO 1.5
-// Tỷ lệ ATR để xác định vùng sideway quanh giá
-#define DEF_SIDEWAY_ATR_RATIO 1.0
+// Tỷ lệ % zone để xác định vùng sideway quanh MA
+#define DEF_MA_SIDEWAY_ZONE_RATIO 0.05
 
 // --- FILTER SETTINGS ---
 // Điểm tối thiểu để signal được coi là valid (0-100)%

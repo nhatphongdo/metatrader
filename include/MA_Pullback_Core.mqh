@@ -46,10 +46,10 @@ struct SMAPullbackConfig
    // ==============================================================
    // STRATEGY PARAMETERS
    // ==============================================================
-   int minTrendBars;        // Số nến tối thiểu để hình thành trend trước khi đảo chiều
-   double sidewayATRRatio;  // Tỷ lệ vùng sideway 2 bên MA theo ATR
-   int maxWaitBars;         // Số nến tối đa chờ pullback
-   int srLookback;          // Số nến để kiểm tra S/R Zone
+   int minTrendBars;           // Số nến tối thiểu để hình thành trend trước khi đảo chiều
+   double maSidewayZoneRatio;  // Tỷ lệ % vùng sideway 2 bên MA
+   int maxWaitBars;            // Số nến tối đa chờ pullback
+   int srLookback;             // Số nến để kiểm tra S/R Zone
 
    // ==============================================================
    // FILTER: MA SLOPE
@@ -644,15 +644,15 @@ void ScanForSignal(const SMAPullbackConfig& config, string symbol, datetime curr
             outResult.isBuy = trend == 1;
             // Trend đảo chiều (trend != cutTrend)
             // Kiểm tra điều kiện để xác nhận điểm cắt
-            string cutReason =
-                CheckCutSignal(config, outResult.isBuy, trendBuyBarsCount, trendSellBarsCount,
-                               close[outResult.startIdx], close[trendPeakIdx], sma50[trendPeakIdx], atr[trendPeakIdx]);
+            string cutReason = CheckCutSignal(config, outResult.isBuy, trendBuyBarsCount, trendSellBarsCount,
+                                              close[trendPeakIdx], sma50[trendPeakIdx], close[idx], sma50[idx]);
             if (cutReason != "")
             {
-               // Không phải điểm cắt hợp lệ thì break scan tại nến trước đó để vòng scan tiếp theo bắt đầu xử lý từ nến
-               // cắt này
+               // Không phải điểm cắt hợp lệ thì break scan, vòng scan tiếp theo sẽ bắt đầu từ nến hiện tại
                outResult.cutFound = false;
                outResult.cancelled = true;
+               outResult.confirmIdx = idx;
+               outResult.confirmTime = time[idx];
                outResult.endIdx = idx + 1;
                outResult.endTime = time[idx + 1];
                outResult.cancelReason = cutReason;
@@ -678,8 +678,8 @@ void ScanForSignal(const SMAPullbackConfig& config, string symbol, datetime curr
       for (int k = 0; k <= config.maxWaitBars; k++)
       {
          /** Chuyển thành trọng số filter ----
-         double sidewayUpper = sma50[idx] + atr[idx] * config.sidewayATRRatio;
-         double sidewayLower = sma50[idx] - atr[idx] * config.sidewayATRRatio;
+         double sidewayUpper = sma50[idx] * (1 + config.maSidewayZoneRatio / 100.0);
+         double sidewayLower = sma50[idx] * (1 - config.maSidewayZoneRatio / 100.0);
 
          // Kiểm tra xem nến có vượt quá vùng sideway không
          if (close[idx] < sidewayLower || close[idx] > sidewayUpper)
@@ -758,28 +758,30 @@ void ScanForSignal(const SMAPullbackConfig& config, string symbol, datetime curr
 
 // Kiểm tra điều kiện cắt
 string CheckCutSignal(const SMAPullbackConfig& config, bool isBuyTrend, int buyBarCount, int sellBarCount,
-                      double startPrice, double peakPrice, double maAtPeak, double atrAtPeak)
+                      double peakPrice, double maAtPeak, double cutClosePrice, double maAtCut)
 {
    if (buyBarCount + sellBarCount < config.minTrendBars)
       return StringFormat("Không đủ nến để tạo xu hướng, min %d nến", config.minTrendBars);
 
    if (isBuyTrend)
    {
-      // if (maAtPeak < startPrice)
-      //    return StringFormat("MA tại đỉnh thấp hơn giá bắt đầu, MA = %.5f < Start = %.5f", maAtPeak, startPrice);
-      if (peakPrice - maAtPeak <= config.sidewayATRRatio * atrAtPeak)
+      if (peakPrice <= maAtPeak * (1 + config.maSidewayZoneRatio / 100.0))
+         return StringFormat("Đỉnh nến chưa vượt qua vùng sideway MA, Peak=%.5f, MA=%.5f, Ratio=%.2f%%", peakPrice,
+                             maAtPeak, config.maSidewayZoneRatio);
+      if (cutClosePrice < maAtCut * (1 - config.maSidewayZoneRatio / 100.0))
          return StringFormat(
-             "Đỉnh nến chưa vượt qua vùng sideway của MA, Peak = %.5f, MA = %.5f, ATR = %.5f, Ratio = %.2f", peakPrice,
-             maAtPeak, atrAtPeak, config.sidewayATRRatio);
+             "Nến cắt đã đóng cửa dưới vùng sideway MA, có thể đảo chiều, Close=%.5f, MA=%.5f, Ratio=%.2f%%",
+             cutClosePrice, maAtCut, config.maSidewayZoneRatio);
    }
    else
    {
-      // if (maAtPeak > startPrice)
-      //    return StringFormat("MA tại đáy cao hơn giá bắt đầu, MA = %.5f > Start = %.5f", maAtPeak, startPrice);
-      if (maAtPeak - peakPrice <= config.sidewayATRRatio * atrAtPeak)
+      if (peakPrice >= maAtPeak * (1 - config.maSidewayZoneRatio / 100.0))
+         return StringFormat("Đáy nến chưa vượt qua vùng sideway MA, Peak=%.5f, MA=%.5f, Ratio=%.2f%%", peakPrice,
+                             maAtPeak, config.maSidewayZoneRatio);
+      if (cutClosePrice > maAtCut * (1 + config.maSidewayZoneRatio / 100.0))
          return StringFormat(
-             "Đáy nến chưa vượt qua vùng sideway của MA, Peak = %.5f, MA = %.5f, ATR = %.5f, Ratio = %.2f", peakPrice,
-             maAtPeak, atrAtPeak, config.sidewayATRRatio);
+             "Nến cắt đã đóng cửa trên vùng sideway MA, có thể đảo chiều, Close=%.5f, MA=%.5f, Ratio=%.2f%%",
+             cutClosePrice, maAtCut, config.maSidewayZoneRatio);
    }
 
    return "";

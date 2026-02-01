@@ -34,9 +34,10 @@ input int InpATRLength = DEF_ATR_LENGTH;          // Số nến tính ATR
 
 // --- STRATEGY SETTINGS ---
 input group "=== Cấu hình Chiến lược ===";
-input int InpMaxWaitBars = DEF_MAX_WAIT_BARS;             // Số nến tối đa chờ pullback
-input int InpSRLookback = DEF_SR_LOOKBACK;                // Số nến lookback để tìm support / resistance
-input double InpSideWayATRRatio = DEF_SIDEWAY_ATR_RATIO;  // Tỷ lệ ATR để xác định vùng sideway
+input int InpMinTrendBars = DEF_MIN_TREND_BARS;  // Số nến tối thiểu để hình thành trend trước khi đảo chiều
+input int InpMaxWaitBars = DEF_MAX_WAIT_BARS;    // Số nến tối đa chờ pullback
+input int InpSRLookback = DEF_SR_LOOKBACK;       // Số nến lookback để tìm support / resistance
+input double InpMASidewayZoneRatio = DEF_MA_SIDEWAY_ZONE_RATIO;  // Tỷ lệ % zone để xác định vùng sideway quanh MA
 
 // ==================================================
 // ============== FILTER SETTINGS ===================
@@ -188,6 +189,8 @@ int OnInit()
                     (ENUM_MA_METHOD)InpMAType,  // Method
                     InpMAFastColor,             // Color
                     1,                          // Width
+                    InpMASidewayZoneRatio,      // Zone width
+                    0x303030,                   // Zone color
                     PRICE_CLOSE                 // Price
    );
    if (hSMA50 == INVALID_HANDLE)
@@ -201,6 +204,8 @@ int OnInit()
                      (ENUM_MA_METHOD)InpMAType,  // Method
                      InpMASlowColor,             // Color
                      1,                          // Width
+                     0.0,                        // Zone width
+                     0x303030,                   // Zone color
                      PRICE_CLOSE                 // Price
    );
    if (hSMA200 == INVALID_HANDLE)
@@ -244,8 +249,9 @@ int OnInit()
    g_config.srBufferPercent = InpSRBufferPercent;
    g_config.minScoreToPass = InpMinScoreToPass;
    // Strategy Parameters
+   g_config.minTrendBars = InpMinTrendBars;
    g_config.maxWaitBars = InpMaxWaitBars;
-   g_config.sidewayATRRatio = InpSideWayATRRatio;
+   g_config.maSidewayZoneRatio = InpMASidewayZoneRatio;
    g_config.srLookback = InpSRLookback;
    // Filter: MA Slope
    g_config.enableMASlopeFilter = InpEnableMASlopeFilter;
@@ -485,16 +491,18 @@ int OnCalculate(const int rates_total, const int prev_calculated, const datetime
       limit = 1;
    }
 
+   int copyCount = MathMin(rates_total, 10000);  // Copy tối đa 10000 nến
+
    // Copy SMA buffers - cần đủ data cho tất cả nến
    double sma50[], sma200[];
    ArraySetAsSeries(sma50, true);
    ArraySetAsSeries(sma200, true);
 
-   int copyCount = MathMin(rates_total, 10000);  // Copy tối đa 10000 nến
-   if (CopyBuffer(hSMA50, 0, 0, copyCount, sma50) <= 0)
+   // Với đường Custom Moving Average, MA Center Line nằm ở index 2 (0: top, 1: bottom line)
+   if (CopyBuffer(hSMA50, 2, 0, copyCount, sma50) <= 0)
       return rates_total;
 
-   if (CopyBuffer(hSMA200, 0, 0, copyCount, sma200) <= 0)
+   if (CopyBuffer(hSMA200, 2, 0, copyCount, sma200) <= 0)
       return rates_total;
 
    // Copy RSI / MACD
@@ -648,8 +656,9 @@ int OnCalculate(const int rates_total, const int prev_calculated, const datetime
          // Tìm thấy nến cắt lỗi
          DrawCutCandleMarker(g_drawConfig, g_signalCount, scanResult.isBuy, scanResult.startTime,
                              scanResult.isBuy ? low[scanResult.startIdx] : high[scanResult.startIdx],
-                             scanResult.endTime, scanResult.isBuy ? low[scanResult.endIdx] : high[scanResult.endIdx],
-                             sma50[scanResult.endIdx], scanResult.cancelReason, g_pointValue);
+                             scanResult.confirmTime,
+                             scanResult.isBuy ? low[scanResult.confirmIdx] : high[scanResult.confirmIdx],
+                             sma50[scanResult.confirmIdx], scanResult.cancelReason, g_pointValue);
       }
    }
 

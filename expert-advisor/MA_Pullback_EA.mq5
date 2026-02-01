@@ -54,9 +54,10 @@ input int InpATRLength = DEF_ATR_LENGTH;          // Số nến tính ATR
 
 // --- STRATEGY SETTINGS ---
 input group "=== Cấu hình Chiến lược ===";
-input int InpMaxWaitBars = DEF_MAX_WAIT_BARS;             // Số nến tối đa chờ pullback (ít hơn = entry sớm hơn)
-input int InpSRLookback = DEF_SR_LOOKBACK;                // Số nến lookback để tìm support / resistance
-input double InpSideWayATRRatio = DEF_SIDEWAY_ATR_RATIO;  // Tỷ lệ ATR để xác định vùng sideway
+input int InpMinTrendBars = DEF_MIN_TREND_BARS;  // Số nến tối thiểu để hình thành trend trước khi đảo chiều
+input int InpMaxWaitBars = DEF_MAX_WAIT_BARS;    // Số nến tối đa chờ pullback (ít hơn = entry sớm hơn)
+input int InpSRLookback = DEF_SR_LOOKBACK;       // Số nến lookback để tìm support / resistance
+input double InpMASidewayZoneRatio = DEF_MA_SIDEWAY_ZONE_RATIO;  // Tỷ lệ % zone để xác định vùng sideway quanh MA
 
 // ==================================================
 // ============== FILTER SETTINGS ===================
@@ -259,8 +260,9 @@ int OnInit()
    g_config.srBufferPercent = InpSRBufferPercent;
    g_config.minScoreToPass = InpMinScoreToPass;
    // Strategy Parameters
+   g_config.minTrendBars = InpMinTrendBars;
    g_config.maxWaitBars = InpMaxWaitBars;
-   g_config.sidewayATRRatio = InpSideWayATRRatio;
+   g_config.maSidewayZoneRatio = InpMASidewayZoneRatio;
    g_config.srLookback = InpSRLookback;
    // Filter: MA Slope
    g_config.enableMASlopeFilter = InpEnableMASlopeFilter;
