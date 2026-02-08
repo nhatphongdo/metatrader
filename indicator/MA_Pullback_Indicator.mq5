@@ -564,9 +564,23 @@ int OnCalculate(const int rates_total, const int prev_calculated, const datetime
       // Realtime: chỉ check các nến mới
       // Bắt đầu từ nến cũ nhất cần kiểm tra (để đảm bảo không bỏ sót)
       // và kết thúc ở nến đóng mới nhất (index 1)
-      startIdx = rates_total - prev_calculated + InpMaxWaitBars;
-      if (startIdx >= copyCount)
-         startIdx = copyCount - 1;
+      if (g_lastSignalTime <= 0)
+      {
+         startIdx = rates_total - prev_calculated + InpMaxWaitBars;
+         if (startIdx >= copyCount)
+            startIdx = copyCount - 1;
+      }
+      else
+      {
+         // Tính toán startIdx theo thời gian kết thúc lần trước
+         startIdx = 1;
+         while (startIdx < copyCount - 1)
+         {
+            if (time[startIdx + 1] <= g_lastSignalTime)
+               break;
+            startIdx++;
+         }
+      }
       endIdx = 1;
    }
 
@@ -603,7 +617,8 @@ int OnCalculate(const int rates_total, const int prev_calculated, const datetime
       for (int i = 0; i < scanResult.failedSignalCount; i++)
       {
          // Signal failed - vẽ failed marker
-         DrawSignalMarker(g_drawConfig, g_signalCount, scanResult.isBuy, true, scanResult.failedTime[i], 0,
+         DrawSignalMarker(g_drawConfig, g_signalCount, scanResult.isBuy, true, scanResult.failedTime[i],
+                          scanResult.cutTime, scanResult.startTime,
                           scanResult.isBuy ? low[scanResult.failedIdx[i]] : high[scanResult.failedIdx[i]], 0, 0, "", 0,
                           scanResult.failedSignal[i].reasons, 0, 0, "", g_pointValue, _Period);
       }
@@ -619,7 +634,8 @@ int OnCalculate(const int rates_total, const int prev_calculated, const datetime
          if (scanResult.cancelled)
          {
             // Signal cancelled - vẽ cancelled marker
-            DrawSignalMarker(g_drawConfig, g_signalCount, scanResult.isBuy, true, scanResult.confirmTime, 0,
+            DrawSignalMarker(g_drawConfig, g_signalCount, scanResult.isBuy, true, scanResult.confirmTime,
+                             scanResult.cutTime, scanResult.startTime,
                              scanResult.isBuy ? low[scanResult.confirmIdx] : high[scanResult.confirmIdx], 0, 0, "", 0,
                              "- " + scanResult.cancelReason, 0, 0, "", g_pointValue, _Period);
          }
@@ -627,7 +643,7 @@ int OnCalculate(const int rates_total, const int prev_calculated, const datetime
          {
             // Signal found - vẽ lên chart
             DrawSignalMarker(g_drawConfig, g_signalCount, scanResult.isBuy, false, scanResult.confirmTime,
-                             scanResult.cutIdx - scanResult.confirmIdx, scanResult.signal.entry, scanResult.signal.sl,
+                             scanResult.cutTime, scanResult.startTime, scanResult.signal.entry, scanResult.signal.sl,
                              scanResult.signal.tp, scanResult.signal.strength, scanResult.signal.score,
                              scanResult.signal.reasons, scanResult.signal.support, scanResult.signal.resistance,
                              scanResult.confirmPattern, g_pointValue, _Period);

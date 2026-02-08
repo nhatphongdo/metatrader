@@ -617,7 +617,8 @@ void OnTick()
             // Vẽ cancelled signal (nếu bật)
             if (InpEnableDrawSignal)
             {
-               DrawSignalMarker(g_drawConfig, g_signalCount, scanResult.isBuy, true, time[scanResult.confirmIdx], 0,
+               DrawSignalMarker(g_drawConfig, g_signalCount, scanResult.isBuy, true, scanResult.confirmTime,
+                                scanResult.cutTime, scanResult.startTime,
                                 scanResult.isBuy ? low[scanResult.confirmIdx] : high[scanResult.confirmIdx], 0, 0, "",
                                 0, "- " + scanResult.cancelReason, 0, 0, "", g_pointValue, _Period);
             }
@@ -627,11 +628,11 @@ void OnTick()
             // Vẽ signal lên chart (nếu bật)
             if (InpEnableDrawSignal)
             {
-               DrawSignalMarker(g_drawConfig, g_signalCount, scanResult.isBuy, false, time[scanResult.confirmIdx],
-                                scanResult.cutIdx - scanResult.confirmIdx, scanResult.signal.entry,
-                                scanResult.signal.sl, scanResult.signal.tp, scanResult.signal.strength,
-                                scanResult.signal.score, scanResult.signal.reasons, scanResult.signal.support,
-                                scanResult.signal.resistance, scanResult.confirmPattern, g_pointValue, _Period);
+               DrawSignalMarker(g_drawConfig, g_signalCount, scanResult.isBuy, false, scanResult.confirmTime,
+                                scanResult.cutTime, scanResult.startTime, scanResult.signal.entry, scanResult.signal.sl,
+                                scanResult.signal.tp, scanResult.signal.strength, scanResult.signal.score,
+                                scanResult.signal.reasons, scanResult.signal.support, scanResult.signal.resistance,
+                                scanResult.confirmPattern, g_pointValue, _Period);
             }
 
             // Chỉ trade nếu signal xác nhận tại nến vừa đóng (index = 1)

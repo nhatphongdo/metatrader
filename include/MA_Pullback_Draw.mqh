@@ -147,17 +147,15 @@ void InitDefaultSignalDrawConfig(SignalDrawConfig& config, string prefix = "SIG_
 //| Return: Base ID của signal để dùng cho tooltip                   |
 //+------------------------------------------------------------------+
 string DrawSignalMarker(const SignalDrawConfig& config, int signalIdx, bool isBuy, bool isCanceled, datetime signalTime,
-                        int signalLength, double entryPrice, double slPrice, double tpPrice, string strengthText,
-                        double score, string reasons, double support, double resistance, string patternName,
-                        double pointValue, ENUM_TIMEFRAMES period)
+                        datetime cutTime, datetime startTime, double entryPrice, double slPrice, double tpPrice,
+                        string strengthText, double score, string reasons, double support, double resistance,
+                        string patternName, double pointValue, ENUM_TIMEFRAMES period)
 {
    string id = config.objPrefix + IntegerToString(signalTime);
 
    // Skip nếu đã tồn tại
    if (ObjectFind(0, id + "_AR") >= 0)
       return "";
-
-   datetime endTime = signalTime + MathMin(config.lineLengthBars, signalLength) * PeriodSeconds(period);
 
    // Entry Arrow
    ObjectCreate(0, id + "_AR", OBJ_ARROW, 0, signalTime, entryPrice);
@@ -170,10 +168,12 @@ string DrawSignalMarker(const SignalDrawConfig& config, int signalIdx, bool isBu
       ObjectSetInteger(0, id + "_AR", OBJPROP_ANCHOR, isBuy ? ANCHOR_TOP : ANCHOR_BOTTOM);
    }
 
+   datetime zoneEndTime = signalTime == cutTime ? startTime : cutTime;
+
    // Stop Loss Line
    if (slPrice > 0)
    {
-      ObjectCreate(0, id + "_SL", OBJ_TREND, 0, signalTime, slPrice, endTime, slPrice);
+      ObjectCreate(0, id + "_SL", OBJ_TREND, 0, signalTime, slPrice, zoneEndTime, slPrice);
       ObjectSetInteger(0, id + "_SL", OBJPROP_COLOR, config.slColor);
       ObjectSetInteger(0, id + "_SL", OBJPROP_RAY, false);
       ObjectSetInteger(0, id + "_SL", OBJPROP_WIDTH, 2);
@@ -183,7 +183,7 @@ string DrawSignalMarker(const SignalDrawConfig& config, int signalIdx, bool isBu
    // Take Profit Line
    if (tpPrice > 0)
    {
-      ObjectCreate(0, id + "_TP", OBJ_TREND, 0, signalTime, tpPrice, endTime, tpPrice);
+      ObjectCreate(0, id + "_TP", OBJ_TREND, 0, signalTime, tpPrice, zoneEndTime, tpPrice);
       ObjectSetInteger(0, id + "_TP", OBJPROP_COLOR, config.tpColor);
       ObjectSetInteger(0, id + "_TP", OBJPROP_RAY, false);
       ObjectSetInteger(0, id + "_TP", OBJPROP_WIDTH, 2);
@@ -242,35 +242,35 @@ string DrawSignalMarker(const SignalDrawConfig& config, int signalIdx, bool isBu
    if (isBuy && support > 0)
    {
       // BUY: Vùng Support (xanh) từ support đến entry
-      ObjectCreate(0, id + "_S", OBJ_RECTANGLE, 0, signalTime, support, endTime, entryPrice);
+      ObjectCreate(0, id + "_S", OBJ_RECTANGLE, 0, signalTime, support, zoneEndTime, entryPrice);
       ObjectSetInteger(0, id + "_S", OBJPROP_COLOR, config.resistColor);
       ObjectSetInteger(0, id + "_S", OBJPROP_FILL, true);
-      ObjectSetInteger(0, id + "_S", OBJPROP_BACK, true);
+      ObjectSetInteger(0, id + "_S", OBJPROP_BACK, false);
       ObjectSetString(0, id + "_S", OBJPROP_TOOLTIP, StringFormat("Vùng Hỗ Trợ: %.5f - %.5f", support, entryPrice));
 
       // BUY: Vùng Resistance (đỏ) từ entry đến resistance
-      ObjectCreate(0, id + "_R", OBJ_RECTANGLE, 0, signalTime, entryPrice, endTime, resistance);
+      ObjectCreate(0, id + "_R", OBJ_RECTANGLE, 0, signalTime, entryPrice, zoneEndTime, resistance);
       ObjectSetInteger(0, id + "_R", OBJPROP_COLOR, config.supportColor);
       ObjectSetInteger(0, id + "_R", OBJPROP_FILL, true);
-      ObjectSetInteger(0, id + "_R", OBJPROP_BACK, true);
+      ObjectSetInteger(0, id + "_R", OBJPROP_BACK, false);
       ObjectSetString(0, id + "_R", OBJPROP_TOOLTIP,
                       StringFormat("Vùng Kháng Cự: %.5f - %.5f", entryPrice, resistance));
    }
    else if (!isBuy && resistance > 0)
    {
       // SELL: Vùng Resistance (đỏ) từ resistance đến entry
-      ObjectCreate(0, id + "_R", OBJ_RECTANGLE, 0, signalTime, resistance, endTime, entryPrice);
+      ObjectCreate(0, id + "_R", OBJ_RECTANGLE, 0, signalTime, resistance, zoneEndTime, entryPrice);
       ObjectSetInteger(0, id + "_R", OBJPROP_COLOR, config.resistColor);
       ObjectSetInteger(0, id + "_R", OBJPROP_FILL, true);
-      ObjectSetInteger(0, id + "_R", OBJPROP_BACK, true);
+      ObjectSetInteger(0, id + "_R", OBJPROP_BACK, false);
       ObjectSetString(0, id + "_R", OBJPROP_TOOLTIP,
                       StringFormat("Vùng Kháng Cự: %.5f - %.5f", resistance, entryPrice));
 
       // SELL: Vùng Support (xanh) từ entry đến support
-      ObjectCreate(0, id + "_S", OBJ_RECTANGLE, 0, signalTime, entryPrice, endTime, support);
+      ObjectCreate(0, id + "_S", OBJ_RECTANGLE, 0, signalTime, entryPrice, zoneEndTime, support);
       ObjectSetInteger(0, id + "_S", OBJPROP_COLOR, config.supportColor);
       ObjectSetInteger(0, id + "_S", OBJPROP_FILL, true);
-      ObjectSetInteger(0, id + "_S", OBJPROP_BACK, true);
+      ObjectSetInteger(0, id + "_S", OBJPROP_BACK, false);
       ObjectSetString(0, id + "_S", OBJPROP_TOOLTIP, StringFormat("Vùng Hỗ Trợ: %.5f - %.5f", entryPrice, support));
    }
 
